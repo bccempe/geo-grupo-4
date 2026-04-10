@@ -1,4 +1,4 @@
-FROM python:3.11
+FROM python:3.11-alpine
 
 WORKDIR /app
 
@@ -8,8 +8,4 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-ENV STREAMLIT_SERVER_PORT=8501
-ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
-ENV API_URL=http://backend:8000
-
-CMD streamlit run app.py --server.port=${STREAMLIT_SERVER_PORT} --server.address=${STREAMLIT_SERVER_ADDRESS}
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
