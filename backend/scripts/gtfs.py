@@ -1,67 +1,46 @@
 import pandas as pd
-import json
-from datetime import datetime
+import os
+from pathlib import Path
 
-# Dummy data source
+gtfs_path = os.getenv("GTFS_DATA_PATH", "backend/data/GTFS_20260321_v3")
+DATA_PATH = Path(gtfs_path) if isinstance(gtfs_path, str) else gtfs_path
+
+
 def get_data_from_source():
-    """Fetch dummy GTFS data from a source"""
-    dummy_data = [
-        {"trip_id": "T001", "route_id": "R1", "stop_id": "S1", "arrival_time": "08:00:00", "departure_time": "08:05:00"},
-        {"trip_id": "T001", "route_id": "R1", "stop_id": "S2", "arrival_time": "08:15:00", "departure_time": "08:16:00"},
-        {"trip_id": "T002", "route_id": "R1", "stop_id": "S1", "arrival_time": "08:30:00", "departure_time": "08:35:00"},
-        {"trip_id": "T002", "route_id": "R1", "stop_id": "S3", "arrival_time": "08:45:00", "departure_time": "08:46:00"},
-        {"trip_id": "T003", "route_id": "R2", "stop_id": "S2", "arrival_time": "09:00:00", "departure_time": "09:05:00"},
-    ]
-    return dummy_data
+    """Cargar archivos GTFS reales"""
+    files = ["stops", "stop_times", "routes", "trips"]
+    data = {}
+    for f in files:
+        path = DATA_PATH / f"{f}.txt"
+        if path.exists():
+            data[f] = pd.read_csv(path)
+            print(f"Cargado {f}: {len(data[f])} registros")
+    return data
 
-# Normalize data
-def normalize_data(raw_data):
-    """Normalize raw data into a structured format"""
-    df = pd.DataFrame(raw_data)
-    
-    # Clean and normalize columns
-    df['trip_id'] = df['trip_id'].str.strip().str.upper()
-    df['route_id'] = df['route_id'].str.strip().str.upper()
-    df['stop_id'] = df['stop_id'].str.strip().str.upper()
-    
-    # Validate time format
-    df['arrival_time'] = pd.to_datetime(df['arrival_time'], format='%H:%M:%S', errors='coerce')
-    df['departure_time'] = pd.to_datetime(df['departure_time'], format='%H:%M:%S', errors='coerce')
-    
-    # Remove duplicates
-    df = df.drop_duplicates()
-    
-    return df
 
-# Main execution
+def get_head(data, table, n=10):
+    """Obtener head de una tabla específica"""
+    if table in data:
+        return data[table].head(n)
+    return None
+
+
 if __name__ == "__main__":
+    from utils import normalize_gtfs
+    
     print("=" * 50)
     print("GTFS Data Processing Script")
     print("=" * 50)
     
-    # Get raw data
-    print("\n1. Fetching data from source...")
+    print("\n1. Cargando datos...")
     raw_data = get_data_from_source()
-    print(f"   Retrieved {len(raw_data)} records")
     
-    # Normalize data
-    print("\n2. Normalizing data...")
-    normalized_df = normalize_data(raw_data)
-    print(f"   Normalized to {len(normalized_df)} unique records")
+    print("\n2. Normalizando datos...")
+    cleaned_data = normalize_gtfs(raw_data)
     
-    # Display head
-    print("\n3. Data Preview (First 5 rows):")
-    print("-" * 50)
-    print(normalized_df.head())
+    print("\n3. Resumen:")
+    for name, df in cleaned_data.items():
+        print(f"   {name}: {len(df)} registros")
     
-    # Display summary statistics
-    print("\n4. Summary Statistics:")
-    print("-" * 50)
-    print(f"   Total records: {len(normalized_df)}")
-    print(f"   Unique trips: {normalized_df['trip_id'].nunique()}")
-    print(f"   Unique routes: {normalized_df['route_id'].nunique()}")
-    print(f"   Unique stops: {normalized_df['stop_id'].nunique()}")
-    
-    print("\n" + "=" * 50)
-    print("Processing complete!")
-    print("=" * 50)
+    print("\n4. Preview - Stops (head):")
+    print(cleaned_data["stops"].head())

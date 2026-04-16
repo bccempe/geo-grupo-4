@@ -26,10 +26,13 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      GTFS_DATA_PATH: /app/data/GTFS_20260321_v3
+      DATA_BASE_PATH: /app/data
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./backend/data:/app/data
 
   frontend:
     build: ./frontend
