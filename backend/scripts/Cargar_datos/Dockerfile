@@ -7,6 +7,5 @@ RUN apt-get update && apt-get install -y curl unzip \
 WORKDIR /app
 
 COPY descargar_datos.py .
-COPY rclone.conf /root/.config/rclone/rclone.conf
 
 CMD ["python", "descargar_datos.py"]

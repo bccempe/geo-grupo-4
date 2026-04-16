@@ -10,7 +10,9 @@ from utils.data_loader import (
     get_available_datasets,
     get_dataset_files,
     load_cleaned_dataset,
-    get_data_summary
+    get_data_summary,
+    get_censo_comunas,
+    load_censo_comuna
 )
 
 app = FastAPI()
@@ -81,3 +83,19 @@ def get_dataset_file_head(dataset_name: str, file_name: str, n: int = 10):
 def get_summary():
     """Resumen de todos los datasets y sus archivos"""
     return get_data_summary()
+
+
+@app.get("/censo")
+def list_censo_comunas():
+    """Lista las comunas disponibles en el censo"""
+    comunas = get_censo_comunas()
+    return {"comunas": comunas, "total": len(comunas)}
+
+
+@app.get("/censo/{comuna}")
+def get_censo_comuna(comuna: str, limit: int = 10):
+    """Obtiene los datos de una comuna del censo (head)"""
+    df = load_censo_comuna(comuna, limit=limit)
+    if df is None:
+        return {"error": f"Comuna {comuna} no encontrada"}
+    return df.to_dict(orient="records")

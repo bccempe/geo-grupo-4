@@ -1,6 +1,0 @@
-services:
-  drive-sync:
-    build: .
-    container_name: drive_sync
-    volumes:
-      - ./datos:/data
