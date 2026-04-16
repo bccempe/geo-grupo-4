@@ -1,0 +1,6 @@
+gdown==5.2.0
+python-dotenv==1.0.1
+pandas
+sqlalchemy
+psycopg2-binary
+geopandas

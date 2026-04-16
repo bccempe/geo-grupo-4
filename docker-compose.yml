@@ -1,6 +1,9 @@
-services:
-  # WEB APP 
+version: "3.9"
 
+services:
+  # =========================
+  # WEB APP
+  # =========================
   db:
     image: postgis/postgis:15-3.4
     container_name: postgis_db
@@ -12,11 +15,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     profiles:
       - web
+      - batch
 
   backend:
     build: ./backend
@@ -56,8 +60,9 @@ services:
     profiles:
       - web
 
+  # =========================
   # BATCH JOBS
-
+  # =========================
   drive-sync:
     build:
       context: ./backend/scripts/Cargar_datos
@@ -67,6 +72,25 @@ services:
       - .env
     volumes:
       - ./backend/data:/data
+    command: ["python", "descargar_datos.py"]
+    profiles:
+      - batch
+
+  etl-loader:
+    build:
+      context: ./backend/scripts/Cargar_datos
+      dockerfile: Dockerfile
+    container_name: etl_loader
+    depends_on:
+      - db
+      - drive-sync
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    volumes:
+      - ./backend/data:/data
+    command: ["python", "auto_import.py"]
     profiles:
       - batch
 
@@ -76,9 +100,11 @@ services:
       dockerfile: Dockerfile
     container_name: procesar_censo
     command: ["python", "-m", "scripts.censo"]
+    env_file:
+      - .env
     environment:
-      - CENSO_DATA_PATH=/app/data/datos_censo_por_manzana_por_comuna
-      - CENSO_FORCE_RELOAD=0
+      CENSO_DATA_PATH: /app/data/datos_censo_por_manzana_por_comuna
+      CENSO_FORCE_RELOAD: 0
     volumes:
       - ./backend/data:/app/data
       - ./backend/scripts:/app/scripts:ro
@@ -92,8 +118,10 @@ services:
       dockerfile: Dockerfile
     container_name: process_gtfs
     command: ["python", "-m", "scripts.gtfs"]
+    env_file:
+      - .env
     environment:
-      - GTFS_DATA_PATH=/app/data/GTFS_20260321_v3
+      GTFS_DATA_PATH: /app/data/GTFS_20260321_v3
     volumes:
       - ./backend/data:/app/data
       - ./backend/scripts:/app/scripts:ro
