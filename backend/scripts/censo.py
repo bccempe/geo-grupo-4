@@ -2,7 +2,7 @@ import pandas as pd
 import os
 from pathlib import Path
 
-CENSO_DATA_PATH = os.getenv("CENSO_DATA_PATH", "../Cargar_datos/datos/datos_censo_por_manzana_por_comuna")
+CENSO_DATA_PATH = os.getenv("CENSO_DATA_PATH", "./datos_censo_por_manzana_por_comuna")
 
 
 code_to_comuna = {
