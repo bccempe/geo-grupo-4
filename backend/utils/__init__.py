@@ -4,11 +4,17 @@ from pathlib import Path
 
 
 def clean_df_for_json(df):
-    """Limpia valores no serializables en JSON (NaN, inf, -inf)"""
+    """Limpia valores no serializables en JSON (NaN, inf, -inf, *)"""
     df = df.copy()
+    df = df.replace({'*': None, '* ': None})
+
     for col in df.columns:
         if df[col].dtype == 'float64' or df[col].dtype == 'float32':
             df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+        if df[col].dtype == 'object':
+            df[col] = df[col].replace({np.nan: None, pd.NA: None, 'NaN': None, 'nan': None, '': None})
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
     df = df.replace({np.nan: None, pd.NA: None, 'NaN': None, 'nan': None, '': None})
     return df
 
@@ -87,3 +93,22 @@ def list_csv_files(folder_path):
     if path.exists():
         return [f.name for f in path.glob("*.txt")]
     return []
+
+
+def normalize_gtfs(data):
+    """Normaliza un diccionario de DataFrames GTFS."""
+    if not isinstance(data, dict):
+        return data
+
+    dataset_type_map = {
+        "stops": "gtfs_stops",
+        "stop_times": "gtfs_stop_times",
+        "routes": "gtfs_routes",
+        "trips": "gtfs_trips",
+    }
+
+    cleaned = {}
+    for name, df in data.items():
+        dataset_type = dataset_type_map.get(name, "generic")
+        cleaned[name] = clean_dataset(df, dataset_type=dataset_type)
+    return cleaned
