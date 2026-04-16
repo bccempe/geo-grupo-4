@@ -1,0 +1,10 @@
+services:
+  procesar-datos-censo:
+    build: .
+    container_name: procesar_datos_censo
+    environment:
+      - CENSO_DATA_PATH=/data/censo
+      - CENSO_FORCE_RELOAD=0
+    volumes:
+      - ../Cargar_datos/datos/datos_censo_por_manzana_por_comuna:/data/censo:rw
+      - ./:/app:rw

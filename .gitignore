@@ -69,3 +69,4 @@ postgres_data/
 *.bak
 *.tmp
 .cache/
+backend/Cargar_datos/datos/
