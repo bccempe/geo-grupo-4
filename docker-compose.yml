@@ -1,6 +1,6 @@
-version: "3.9"
-
 services:
+  # WEB APP 
+
   db:
     image: postgis/postgis:15-3.4
     container_name: postgis_db
@@ -15,6 +15,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    profiles:
+      - web
 
   backend:
     build: ./backend
@@ -26,10 +28,16 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      GTFS_DATA_PATH: /app/data/GTFS_20260321_v3
+      DATA_BASE_PATH: /app/data
+      CENSO_DATA_PATH: /app/data/datos_censo_por_manzana_por_comuna
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./backend/data:/app/data
+    profiles:
+      - web
 
   frontend:
     build: ./frontend
@@ -45,6 +53,53 @@ services:
       - "8501:8501"
     volumes:
       - ./frontend:/app
+    profiles:
+      - web
+
+  # BATCH JOBS
+
+  drive-sync:
+    build:
+      context: ./backend/scripts/Cargar_datos
+      dockerfile: Dockerfile
+    container_name: drive_sync
+    env_file:
+      - .env
+    volumes:
+      - ./backend/data:/data
+    profiles:
+      - batch
+
+  procesar-censo:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: procesar_censo
+    command: ["python", "-m", "scripts.censo"]
+    environment:
+      - CENSO_DATA_PATH=/app/data/datos_censo_por_manzana_por_comuna
+      - CENSO_FORCE_RELOAD=0
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/scripts:/app/scripts:ro
+      - ./backend/utils:/app/utils:ro
+    profiles:
+      - batch
+
+  process-gtfs:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: process_gtfs
+    command: ["python", "-m", "scripts.gtfs"]
+    environment:
+      - GTFS_DATA_PATH=/app/data/GTFS_20260321_v3
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/scripts:/app/scripts:ro
+      - ./backend/utils:/app/utils:ro
+    profiles:
+      - batch
 
 volumes:
   postgres_data:
