@@ -30,14 +30,39 @@ def log(msg):
     print(f"[ETL-DEBUG] {msg}", flush=True)
 
 
+CARPETAS_ESPERADAS = [
+    "GTFS_20260321_v3",
+    "datos_minsal_establecimientos_salud",
+    "datos_censo",
+]
+
+ESPERA_MAX = 600
+INTERVALO = 10
+
+
 def esperar_datos():
     log("Iniciando espera de datos descargados...")
-    while not DATA_DIR.exists() or not any(DATA_DIR.rglob("*")):
-        log("Aún no hay archivos en /data, esperando 5 segundos...")
-        time.sleep(5)
 
-    archivos = list(DATA_DIR.rglob("*"))
-    log(f"Datos detectados. Total elementos encontrados: {len(archivos)}")
+    if not DATA_DIR.exists():
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    tiempo_espera = 0
+    carpetas_faltantes = set(CARPETAS_ESPERADAS)
+
+    while carpetas_faltantes and tiempo_espera < ESPERA_MAX:
+        carpetas_encontradas = {p.name for p in DATA_DIR.iterdir() if p.is_dir()}
+        carpetas_faltantes = set(CARPETAS_ESPERADAS) - carpetas_encontradas
+
+        if carpetas_faltantes:
+            log(f"Carpetas pendientes: {carpetas_faltantes} | espera: {tiempo_espera}s")
+            time.sleep(INTERVALO)
+            tiempo_espera += INTERVALO
+
+    if carpetas_faltantes:
+        raise TimeoutError(f"Timeout: no se completaron las descargas. Faltan: {carpetas_faltantes}")
+
+    log(f"Todas las carpetas esperadas descargadas. Total: {len(CARPETAS_ESPERADAS)}")
+    log(f"Carpetas: {CARPETAS_ESPERADAS}")
 
 
 def esperar_postgis():
