@@ -24,12 +24,12 @@ OSM_PATH = "/data/osm/santiago_walk.osm"
 # DB WAIT
 # =======================
 def wait_for_db():
-    print("⏳ Esperando DB...")
+    print(" Esperando DB...")
     while True:
         try:
             conn = psycopg2.connect(**DB_CONFIG)
             conn.close()
-            print("✅ DB lista")
+            print(" DB lista")
             break
         except:
             time.sleep(2)
@@ -39,10 +39,10 @@ def wait_for_db():
 # =======================
 def download_osm():
     if os.path.exists(OSM_PATH):
-        print("⚠️ OSM ya existe, se reutiliza")
+        print(" OSM ya existe, se reutiliza")
         return
 
-    print("⬇️ Descargando red caminable...")
+    print("⬇ Descargando red caminable...")
     os.makedirs("/data/osm", exist_ok=True)
 
     ox.settings.all_oneway = True
@@ -54,7 +54,7 @@ def download_osm():
     )
 
     ox.save_graph_xml(G, filepath=OSM_PATH)
-    print("✅ OSM descargado")
+    print(" OSM descargado")
 
 # =======================
 # CHECK TABLE
@@ -78,7 +78,7 @@ def table_exists():
 # IMPORT
 # =======================
 def run_osm2pgrouting():
-    print("🚀 Importando a PostgreSQL...")
+    print(" Importando a PostgreSQL...")
 
     cmd = [
         "osm2pgrouting",
@@ -92,7 +92,7 @@ def run_osm2pgrouting():
     ]
 
     subprocess.run(cmd, check=True)
-    print("✅ Grafo creado")
+    print(" Grafo creado")
 
 # =======================
 # COST
@@ -115,20 +115,20 @@ def add_cost():
 
     conn.commit()
     conn.close()
-    print("✅ Costos listos")
+    print(" Costos listos")
 
 # =======================
 # MAIN
 # =======================
-print("🚀 Iniciando pipeline completo...")
+print(" Iniciando pipeline completo...")
 
 wait_for_db()
 download_osm()
 
 if table_exists():
-    print("⚠️ Grafo ya existe, se omite importación")
+    print(" Grafo ya existe, se omite importación")
 else:
     run_osm2pgrouting()
     add_cost()
 
-print("🏁 Pipeline terminado")
+print(" Pipeline terminado")
