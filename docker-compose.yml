@@ -1,44 +1,62 @@
+version: "3.9"
+
 services:
+<<<<<<< Updated upstream
   # WEB APP 
 
+=======
+  # =========================
+  # DATABASE
+  # =========================
+>>>>>>> Stashed changes
   db:
     image: postgis/postgis:15-3.4
     container_name: postgis_db
     restart: always
     env_file:
       - .env
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     profiles:
       - web
 
+  # =========================
+  # BACKEND
+  # =========================
   backend:
     build: ./backend
     container_name: fastapi_backend
     restart: always
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     env_file:
       - .env
+<<<<<<< Updated upstream
     environment:
       DATABASE_URL: ${DATABASE_URL}
       GTFS_DATA_PATH: /app/data/GTFS_20260321_v3
       DATA_BASE_PATH: /app/data
       CENSO_DATA_PATH: /app/data/datos_censo_por_manzana_por_comuna
+=======
+>>>>>>> Stashed changes
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
       - ./backend/data:/app/data
     profiles:
       - web
 
+  # =========================
+  # FRONTEND
+  # =========================
   frontend:
     build: ./frontend
     container_name: streamlit_app
@@ -47,8 +65,6 @@ services:
       - backend
     env_file:
       - .env
-    environment:
-      API_URL: ${API_URL}
     ports:
       - "8501:8501"
     volumes:
@@ -56,12 +72,17 @@ services:
     profiles:
       - web
 
+<<<<<<< Updated upstream
   # BATCH JOBS
 
+=======
+  # =========================
+  # BATCH: DESCARGA DATOS BASE
+  # =========================
+>>>>>>> Stashed changes
   drive-sync:
     build:
       context: ./backend/scripts/Cargar_datos
-      dockerfile: Dockerfile
     container_name: drive_sync
     env_file:
       - .env
@@ -70,6 +91,7 @@ services:
     profiles:
       - batch
 
+<<<<<<< Updated upstream
   procesar-censo:
     build:
       context: ./backend
@@ -79,6 +101,22 @@ services:
     environment:
       - CENSO_DATA_PATH=/app/data/datos_censo_por_manzana_por_comuna
       - CENSO_FORCE_RELOAD=0
+=======
+  # =========================
+  # BATCH: ETL (DEPENDE DE DATOS)
+  # =========================
+  etl-loader:
+    build:
+      context: ./backend/scripts/Cargar_datos
+    container_name: etl_loader
+    depends_on:
+      db:
+        condition: service_healthy
+      drive-sync:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+>>>>>>> Stashed changes
     volumes:
       - ./backend/data:/app/data
       - ./backend/scripts:/app/scripts:ro
@@ -86,18 +124,62 @@ services:
     profiles:
       - batch
 
+  # =========================
+  # BATCH: DESCARGA OSM
+  # =========================
+  osm-downloader:
+    build:
+      context: ./backend/Isocronas_caminando
+    container_name: osm_downloader
+    volumes:
+      - ./backend/data:/data
+    command: ["python", "descargar_grafo_isocrona.py"]
+    profiles:
+      - batch
+
+  # =========================
+  # BATCH: CREAR GRAFO OSM
+  # =========================
+  osm-routing-loader:
+    build:
+      context: ./backend/Isocronas_caminando
+    container_name: osm_routing_loader
+    depends_on:
+      db:
+        condition: service_healthy
+      osm-downloader:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    volumes:
+      - ./backend/data:/data
+    command: ["python", "guardar_grafo.py"]
+    profiles:
+      - batch
+
+  # =========================
+  # BATCH: PROCESAR GTFS
+  # =========================
   process-gtfs:
     build:
       context: ./backend
-      dockerfile: Dockerfile
     container_name: process_gtfs
+<<<<<<< Updated upstream
     command: ["python", "-m", "scripts.gtfs"]
     environment:
       - GTFS_DATA_PATH=/app/data/GTFS_20260321_v3
+=======
+    depends_on:
+      db:
+        condition: service_healthy
+      etl-loader:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+>>>>>>> Stashed changes
     volumes:
       - ./backend/data:/app/data
-      - ./backend/scripts:/app/scripts:ro
-      - ./backend/utils:/app/utils:ro
+    command: ["python", "-m", "scripts.gtfs"]
     profiles:
       - batch
 

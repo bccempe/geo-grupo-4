@@ -5,3 +5,4 @@ sqlalchemy
 geopandas
 shapely
 openpyxl
+osmnx
