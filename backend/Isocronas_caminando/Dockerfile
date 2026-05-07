@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 # copiar código
 COPY . .
 
-# deps python
-RUN pip install osmnx psycopg2-binary python-dotenv
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 CMD ["python", "guardar_grafo.py"]

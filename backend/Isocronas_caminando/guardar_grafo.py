@@ -4,6 +4,8 @@ import subprocess
 import psycopg2
 from dotenv import load_dotenv
 import osmnx as ox
+from sqlalchemy import create_engine
+
 
 # =======================
 # CONFIG
@@ -18,7 +20,7 @@ DB_CONFIG = {
     "port": "5432"
 }
 
-OSM_PATH = "/data/osm/santiago_walk.osm"
+OSM_PATH = "/data/osm/rm_walk.osm"
 
 # =======================
 # DB WAIT
@@ -94,41 +96,122 @@ def run_osm2pgrouting():
     subprocess.run(cmd, check=True)
     print(" Grafo creado")
 
+
 # =======================
-# COST
+# CONFIG
 # =======================
-def add_cost():
+load_dotenv()
+
+DB_CONFIG = {
+    "dbname": os.getenv("POSTGRES_DB"),
+    "user": os.getenv("POSTGRES_USER"),
+    "password": os.getenv("POSTGRES_PASSWORD"),
+    "host": "db",
+    "port": "5432"
+}
+
+DATA_DIR = "/data/osm"
+
+ENGINE = create_engine(
+    f"postgresql://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}"
+)
+
+# =======================
+# WAIT DB
+# =======================
+def wait_for_db():
+    print(" Esperando DB...")
+    while True:
+        try:
+            conn = psycopg2.connect(**DB_CONFIG)
+            conn.close()
+            print(" DB lista")
+            break
+        except:
+            time.sleep(2)
+
+# =======================
+# LISTAR ARCHIVOS
+# =======================
+def get_graph_files():
+    files = [
+        os.path.join(DATA_DIR, f)
+        for f in os.listdir(DATA_DIR)
+        if f.endswith(".graphml")
+    ]
+
+    if not files:
+        raise RuntimeError("No hay archivos .graphml")
+
+    print(f"{len(files)} grafos encontrados")
+    return files
+
+# =======================
+# COSTOS EN POSTGIS
+# =======================
+def add_cost_to_table(table_name):
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
 
-    cur.execute("""
-        ALTER TABLE ways
+    print(f"Calculando costos en {table_name}...")
+
+    cur.execute(f"""
+        ALTER TABLE {table_name}
         ADD COLUMN IF NOT EXISTS cost DOUBLE PRECISION;
 
-        ALTER TABLE ways
+        ALTER TABLE {table_name}
         ADD COLUMN IF NOT EXISTS reverse_cost DOUBLE PRECISION;
 
-        UPDATE ways
-        SET cost = (ST_Length(geom::geography)/1000.0)/5.0*60,
+        UPDATE {table_name}
+        SET cost = (ST_Length(geometry::geography)/1000.0)/5.0*60,
             reverse_cost = cost;
     """)
 
     conn.commit()
     conn.close()
-    print(" Costos listos")
+
+    print(f" Costos listos en {table_name}")
+
+# =======================
+# CARGAR A POSTGIS
+# =======================
+def save_graph_to_postgis(path):
+    nombre = os.path.basename(path).replace(".graphml", "").lower()
+
+    print(f"⬆ Procesando {nombre}")
+
+    G = ox.load_graphml(path)
+
+    # convertir a GeoDataFrames
+    nodes, edges = ox.graph_to_gdfs(G)
+
+    # nombres de tabla
+    nodes_table = f"{nombre}_nodes"
+    edges_table = f"{nombre}_edges"
+
+    # guardar
+    nodes.to_postgis(nodes_table, ENGINE, if_exists="replace", index=True)
+    edges.to_postgis(edges_table, ENGINE, if_exists="replace", index=True)
+
+    print(f" Guardado en: {nodes_table}, {edges_table}")
+
+    #  calcular costos en edges
+    add_cost_to_table(edges_table)
 
 # =======================
 # MAIN
 # =======================
-print(" Iniciando pipeline completo...")
+if __name__ == "__main__":
+    print(" Cargando grafos a PostGIS...")
 
-wait_for_db()
-download_osm()
+    wait_for_db()
 
-if table_exists():
-    print(" Grafo ya existe, se omite importación")
-else:
-    run_osm2pgrouting()
-    add_cost()
+    files = get_graph_files()
 
-print(" Pipeline terminado")
+    for f in files:
+        try:
+            save_graph_to_postgis(f)
+        except Exception as e:
+            print(f" Error con {f}: {e}")
+
+    print(" Proceso terminado")
