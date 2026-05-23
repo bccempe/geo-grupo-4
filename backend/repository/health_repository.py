@@ -9,7 +9,7 @@ class HealthRepository:
     almacenada en Postgres/PostGIS.
     """
 
-    TABLE_NAME = "establecimientos_salud_rm_geop_establecimientos_salud_rm_geop"
+    TABLE_NAME = "establecimientos_de_salud_chile_rm_establecimientos_de_492581f8"
 
     def __init__(self):
         self._cache = None
