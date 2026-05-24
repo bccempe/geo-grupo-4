@@ -5,11 +5,7 @@ import sys
 from pathlib import Path
 from controllers.isochrone_controller import router as isochrone_router
 from controllers.health_desert_controller import router as health_desert_router
-
-
-
-
-
+from controllers.transit_isochrone_controller import router as transit_isochrone_router
 
 from utils.data_loader import (
     get_available_datasets,
@@ -32,6 +28,7 @@ app.add_middleware(
 
 app.include_router(isochrone_router)
 app.include_router(health_desert_router)
+app.include_router(transit_isochrone_router)
 
 
 @app.get("/")
