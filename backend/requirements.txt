@@ -5,3 +5,6 @@ sqlalchemy
 geopandas
 shapely
 openpyxl
+osmnx
+python-dotenv
+networkx
