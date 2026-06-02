@@ -1,0 +1,10 @@
+psycopg2-binary 
+python-dotenv
+sqlalchemy
+psycopg2-binary
+geopandas
+geoalchemy2
+osmnx==1.6.0
+networkx
+shapely
+pandas
