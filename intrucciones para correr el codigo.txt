@@ -1,0 +1,16 @@
+para correr el codigo usar el comando:
+
+docker compose --profile web --profile batch up --build
+
+es recomendable usar un entorno virtual de python
+si la base de datos genera problemas cambiar esta linea en el docker-compose: - "5432:5432" por "5433:5432".
+
+tener docker desktop instalado y corriendo.
+
+tener un internet estable pues descargara varios archivos.
+
+de momento es recomendable correr el codigo 1 vez luego borrar los contenedores y volver a correrlo.
+esto debido a temas que aun no logro arreglar se intenta poblar la base de datos sin tener todos los archivos descargados
+esto puede generar problemas asi que de momento y SOLO para el desarrollo es recomendable correrlo 2 veces
+si ya estan los datos del drive descargados solo corranlo 1 vez.
+
