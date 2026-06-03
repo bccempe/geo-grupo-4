@@ -129,30 +129,55 @@ with tab3:
 with tab4:
     st.header("Isocronas Transporte Público")
 
+    if "censo_comunas" not in st.session_state or not st.session_state.censo_comunas:
+        try:
+            res = requests.get(f"{API_URL}/censo")
+            if res.status_code == 200:
+                st.session_state.censo_comunas = sorted(res.json().get("comunas", []))
+        except:
+            st.session_state.censo_comunas = []
+
+    comunas_disponibles = st.session_state.censo_comunas or ["SANTIAGO"]
+
     col_f1, col_f2 = st.columns([1, 1])
 
     with col_f1:
-        comuna = st.text_input("Comuna (ej. SANTIAGO, LA FLORIDA)", "SANTIAGO")
-        lat = st.number_input("Latitud", value=-33.46803, format="%.5f")
-        lon = st.number_input("Longitud", value=-70.67045, format="%.5f")
         minutes = st.slider("Minutos", 15, 60, 30)
+        st.caption("Haz clic en el mapa para definir el origen:")
+
+        from streamlit_folium import st_folium
+        import folium
+
+        if "iso_origin" not in st.session_state:
+            st.session_state.iso_origin = {"lat": -33.46803, "lon": -70.67045}
+
+        m = folium.Map(
+            location=[st.session_state.iso_origin["lat"], st.session_state.iso_origin["lon"]],
+            zoom_start=14, height=300
+        )
+        folium.Marker(
+            [st.session_state.iso_origin["lat"], st.session_state.iso_origin["lon"]],
+            popup="Origen", icon=folium.Icon(color="red", icon="info-sign")
+        ).add_to(m)
+
+        map_data = st_folium(m, width="100%", height=300, key="picker_map")
+
+        if map_data and map_data.get("last_clicked"):
+            st.session_state.iso_origin = {
+                "lat": map_data["last_clicked"]["lat"],
+                "lon": map_data["last_clicked"]["lng"]
+            }
+
+        lat = st.session_state.iso_origin["lat"]
+        lon = st.session_state.iso_origin["lon"]
+
+        col_lat, col_lon = st.columns(2)
+        col_lat.metric("Latitud", f"{lat:.5f}")
+        col_lon.metric("Longitud", f"{lon:.5f}")
 
     with col_f2:
         st.subheader("Centros de la comuna")
-        if st.button("Cargar centros", key="cargar_centros_tp"):
-            try:
-                resp = requests.get(f"{API_URL}/api/v1/transit/health-deserts", params={
-                    "comuna": comuna, "minutes": minutes
-                })
-                if resp.status_code == 200:
-                    meta = resp.json().get("metadata", {})
-                    st.session_state.centers_count = meta.get("centers", 0)
-                    st.success(f"{meta.get('centers', 0)} centros en {comuna}")
-            except Exception as e:
-                st.warning(f"Error: {e}")
-
-        if "centers_count" in st.session_state:
-            st.info(f"Total: {st.session_state.centers_count} centros de atención primaria")
+        st.info("Los centros se mostrarán en el mapa al calcular la isócrona.")
 
     calc = st.button("Calcular isócrona", type="primary")
 
@@ -160,7 +185,7 @@ with tab4:
         with st.spinner("Calculando isócrona de transporte público..."):
             try:
                 resp = requests.get(f"{API_URL}/api/v1/transit/isochrone", params={
-                    "comuna": comuna, "lat": lat, "lon": lon,
+                    "lat": lat, "lon": lon,
                     "minutes": minutes, "include_centers": False
                 })
                 if resp.status_code != 200:
@@ -180,46 +205,60 @@ with tab4:
         features = data.get("features", [])
         meta = data.get("metadata", {})
 
-        if features:
+        if len(features) < 2:
+            st.warning("No se pudo calcular la isócrona (sin datos de origen)")
+        else:
             from streamlit_folium import st_folium
             import folium
 
             iso_feature = features[0]
             origin_feature = features[1]
 
-            bounds = iso_feature["geometry"]["coordinates"][0]
-            lats = [p[1] for p in bounds]
-            lons = [p[0] for p in bounds]
-            center_lat = sum(lats) / len(lats)
-            center_lon = sum(lons) / len(lons)
+            coords = iso_feature["geometry"]["coordinates"]
+            if not coords:
+                st.warning("No se pudo calcular la isócrona (sin paradas alcanzables)")
+            else:
+                geom_type = iso_feature["geometry"]["type"]
+                if geom_type == "MultiPolygon":
+                    bounds = coords[0][0]
+                else:
+                    bounds = coords[0]
 
-            m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                if geom_type in ("Point", "LineString"):
+                    st.warning("El área calculada es muy pequeña para mostrarse en el mapa")
+                else:
+                    lats = [p[1] for p in bounds]
+                    lons = [p[0] for p in bounds]
+                    center_lat = sum(lats) / len(lats)
+                    center_lon = sum(lons) / len(lons)
 
-            folium.GeoJson(
-                iso_feature,
-                name="Isócrona",
-                style_function=lambda x: {
-                    "fillColor": "#2563eb",
-                    "color": "#1d4ed8",
-                    "weight": 2,
-                    "fillOpacity": 0.3
-                },
-                tooltip=f"{minutes} min"
-            ).add_to(m)
+                    m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-            folium.Marker(
-                [origin_feature["geometry"]["coordinates"][1],
-                 origin_feature["geometry"]["coordinates"][0]],
-                popup="Origen",
-                icon=folium.Icon(color="red", icon="info-sign")
-            ).add_to(m)
+                    folium.GeoJson(
+                        iso_feature,
+                        name="Isócrona",
+                        style_function=lambda x: {
+                            "fillColor": "#2563eb",
+                            "color": "#1d4ed8",
+                            "weight": 2,
+                            "fillOpacity": 0.3
+                        },
+                        tooltip=f"{minutes} min"
+                    ).add_to(m)
 
-            st_folium(m, width="100%", height=500)
+                    folium.Marker(
+                        [origin_feature["geometry"]["coordinates"][1],
+                         origin_feature["geometry"]["coordinates"][0]],
+                        popup="Origen",
+                        icon=folium.Icon(color="red", icon="info-sign")
+                    ).add_to(m)
 
-            col_a, col_b, col_c = st.columns(3)
-            col_a.metric("Paradas cercanas", meta.get("origin_stops", 0))
-            col_b.metric("Paradas alcanzables", meta.get("reachable_stops", 0))
-            col_c.metric("Minutos", meta.get("minutes", minutes))
+                    st_folium(m, width="100%", height=500)
+
+                    col_a, col_b, col_c = st.columns(3)
+                    col_a.metric("Paradas cercanas", meta.get("origin_stops", 0))
+                    col_b.metric("Paradas alcanzables", meta.get("reachable_stops", 0))
+                    col_c.metric("Minutos", meta.get("minutes", minutes))
 
         if st.button("Limpiar mapa", key="clear_iso"):
             del st.session_state.iso_result
@@ -228,7 +267,7 @@ with tab4:
     st.divider()
     st.subheader("Desiertos de Salud (por comuna)")
 
-    desert_comuna = st.text_input("Comuna para desierto", "LA FLORIDA", key="desert_comuna")
+    desert_comuna = st.selectbox("Comuna para desierto", comunas_disponibles, key="desert_comuna")
     desert_minutes = st.slider("Minutos para desierto", 15, 60, 30, key="desert_min")
 
     if st.button("Calcular desierto", type="secondary", key="calc_desert"):

@@ -12,7 +12,7 @@ desert_service = TransitHealthDesertService()
 
 @router.get("/isochrone")
 def get_transit_isochrone(
-    comuna: str = Query(...),
+    comuna: str = Query(None),
     lat: float = Query(...),
     lon: float = Query(...),
     minutes: float = Query(30, ge=5, le=120),

@@ -20,6 +20,29 @@ class GraphRepository:
         self._cache = {}
         self._boundary_cache = {}
 
+    def find_comuna_by_coords(self, lat: float, lon: float) -> str | None:
+        query = text(f"""
+            WITH ptsrid AS (
+                SELECT ST_SetSRID(ST_MakePoint(:lon, :lat), 4326) AS pt
+            )
+            SELECT DISTINCT "{self.BOUNDARY_COMMUNE_COL}" AS comuna
+            FROM "{self.BOUNDARY_TABLE}", ptsrid
+            WHERE ST_Contains(
+                CASE
+                    WHEN ST_SRID("{self.BOUNDARY_GEOM_COL}") = 4326
+                        THEN "{self.BOUNDARY_GEOM_COL}"
+                    ELSE ST_Transform("{self.BOUNDARY_GEOM_COL}", 4326)
+                END,
+                pt
+            )
+            LIMIT 1
+        """)
+        with engine.connect() as conn:
+            result = conn.execute(query, {"lon": lon, "lat": lat}).fetchone()
+        if result is None:
+            return None
+        return str(result.comuna)
+
     def _get_table_columns(self, table_name: str) -> set[str]:
 
         inspector = inspect(engine)

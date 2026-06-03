@@ -84,9 +84,9 @@ class TransitIsochroneService:
 
     def build_isochrone(
         self,
-        comuna,
-        lat,
-        lon,
+        comuna=None,
+        lat=None,
+        lon=None,
         minutes=30,
         include_centers=False
     ):
@@ -97,6 +97,15 @@ class TransitIsochroneService:
         print("lat:", lat, "lon:", lon)
         print("minutes:", minutes)
         print("===================================")
+
+        if comuna is None:
+            raw = self.graph_repo.find_comuna_by_coords(lat, lon)
+            if raw is None:
+                raise ValueError(
+                    "No se pudo determinar la comuna "
+                    "desde las coordenadas"
+                )
+            comuna = raw
 
         comuna_slug = normalize_to_slug(comuna)
 
