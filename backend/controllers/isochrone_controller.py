@@ -10,7 +10,7 @@ service = IsochroneService()
 
 @router.get("/isochrone")
 def get_isochrone(
-    comuna: str = Query(...),
+    comuna: str = Query(None),
     lat: float = Query(...),
     lon: float = Query(...),
     minutes: float = Query(15, ge=1, le=180),

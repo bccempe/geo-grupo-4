@@ -108,9 +108,9 @@ class IsochroneService:
 
     def build_isochrone(
         self,
-        comuna: str,
-        lat: float,
-        lon: float,
+        comuna=None,
+        lat=None,
+        lon=None,
         minutes: float = 15,
         include_centers: bool = False
     ):
@@ -119,6 +119,18 @@ class IsochroneService:
             lon,
             lat
         )
+
+        if comuna is None:
+            raw = self.graph_repository.find_comuna_by_coords(
+                lat,
+                lon
+            )
+            if raw is None:
+                raise ValueError(
+                    "No se pudo determinar la comuna "
+                    "desde las coordenadas"
+                )
+            comuna = raw
 
         comuna_slug = normalize_to_slug(comuna)
 

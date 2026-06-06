@@ -2,6 +2,7 @@ import networkx as nx
 
 from shapely.ops import unary_union
 
+from repository.gtfs_repository import GTFSRepository
 from repository.graph_repository import GraphRepository
 from repository.health_repository import HealthRepository
 
@@ -19,6 +20,7 @@ class HealthDesertService:
 
         self.graph_repository = GraphRepository()
         self.health_repository = HealthRepository()
+        self.gtfs_repo = GTFSRepository()
 
     def _validate_graph(self, graph):
 
@@ -151,7 +153,9 @@ class HealthDesertService:
 
         self._validate_graph(graph)
 
-        centers = self.health_repository.load_centers()
+        centers = self.gtfs_repo.get_centers_by_comuna(
+            comuna_slug
+        )
 
         self._validate_centers(centers)
 
@@ -159,7 +163,7 @@ class HealthDesertService:
 
         for center in centers:
 
-            lon = center.get("lon")
+            lon = center.get("lng")
             lat = center.get("lat")
 
             if lon is None or lat is None:
@@ -249,7 +253,7 @@ class HealthDesertService:
                 "comuna": comuna_slug,
                 "minutes": minutes,
                 "centers": len(centers),
-                "generated_polygons": len(polygons),
-                "desert_percentage": desert_percentage
+                "generated_isochrones": len(polygons),
+                "desert_pct": desert_percentage
             }
         )

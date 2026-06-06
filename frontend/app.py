@@ -1,339 +1,95 @@
+from ui_components import (
+    render_location_picker,
+    call_isochrone_api,
+    process_isochrone_result,
+    call_health_desert_api,
+    render_health_deserts,
+    handle_cleanup
+)
+
 import streamlit as st
-import requests
-import os
+import unicodedata
 
-API_URL = os.getenv("API_URL", "http://localhost:8000")
+def remove_accents(text: str) -> str:
+    normalized = unicodedata.normalize('NFD', text)
+    return ''.join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
 
-st.title("Accesibilidad a Salud RM")
+comunas_disponibles = sorted([
+    "Alhué", "Buin", "Calera de Tango", "Cerrillos", "Cerro Navia", "Colina", "Conchalí", 
+    "Curacaví", "El Bosque", "El Monte", "Estación Central", "Huechuraba", "Independencia", 
+    "Isla de Maipo", "La Cisterna", "La Florida", "La Granja", "La Pintana", "La Reina", 
+    "Lampa", "Las Condes", "Lo Barnechea", "Lo Espejo", "Lo Prado", "Macul", "Maipú", 
+    "María Pinto", "Melipilla", "Ñuñoa", "Padre Hurtado", "Paine", "Pedro Aguirre Cerda", 
+    "Peñaflor", "Peñalolén", "Pirque", "Providencia", "Pudahuel", "Puente Alto", 
+    "Quilicura", "Quinta Normal", "Recoleta", "Renca", "San Bernardo", "San Joaquín", 
+    "San José de Maipo", "San Miguel", "San Pedro", "San Ramón", "Santiago", "Talagante", 
+    "Til Til", "Vitacura"
+])
 
-tab1, tab2, tab3, tab4 = st.tabs(["Datasets", "Centros de Salud", "Censo", "Isocronas TP"])
+comuna_map = {
+    comuna: remove_accents(comuna)
+    for comuna in comunas_disponibles
+}
 
-with tab1:
-    st.header("Explorador de Datasets")
+st.title("Accesibilidad a Centros de Salud en la Región Metropolitana")
 
-    if "datasets" not in st.session_state:
-        st.session_state.datasets = None
-        st.session_state.current_files = None
+iso_tab, desert_tab = st.tabs(["Isócronas", "Desiertos de Salud"])
 
-    col1, col2 = st.columns(2)
+with iso_tab:
+    st.subheader("Mapa de Isócronas")
+    st.caption("Haz click en cualquier punto del mapa para definir el punto de partida de la isócrona")
 
-    with col1:
-        if st.button("Cargar datasets"):
-            with st.spinner("Cargando lista de datasets..."):
-                try:
-                    res = requests.get(f"{API_URL}/datasets")
-                    if res.status_code == 200:
-                        st.session_state.datasets = res.json().get("datasets", [])
-                        st.success(f"Cargados {len(st.session_state.datasets)} datasets")
-                    else:
-                        st.error("Error al cargar datasets")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+    col_iso_map, col_iso_slider = st.columns([2,1])
 
-    with col2:
-        if st.button("Ver resumen"):
-            with st.spinner("Cargando resumen..."):
-                try:
-                    res = requests.get(f"{API_URL}/summary")
-                    if res.status_code == 200:
-                        summary = res.json()
-                        st.json(summary)
-                    else:
-                        st.error("Error al cargar resumen")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+    with col_iso_map:
+        lat, lon = render_location_picker(map_key="picker_iso", origin_key="iso_origin")
+    with col_iso_slider:
+        isochrone_minutes = st.slider("Minutos", 30, 60, 30, key="iso_minutes")
+  
+        st.metric("Latitud", f"{lat:.5f}")
+        st.metric("Longitud", f"{lon:.5f}")
 
-    if st.session_state.datasets:
-        st.subheader("Seleccionar Dataset")
-        selected_dataset = st.selectbox("Dataset", st.session_state.datasets)
+    col_iso_btn1, col_iso_btn2 = st.columns(2)
+    with col_iso_btn1:
+        if st.button("Calcular isócronas", type="primary", key="calc_iso", icon=":material/map_search:", width="stretch"):
+            st.session_state.iso_walk_result = call_isochrone_api("/api/v1/isochrone", lat, lon, isochrone_minutes, spinner_text="Calculando isócrona caminando {} minutos...".format(isochrone_minutes))
+            st.session_state.iso_transit_result = call_isochrone_api("/api/v1/transit/isochrone", lat, lon, isochrone_minutes, spinner_text="Calculando isócrona usando transporte público durante {} minutos...".format(isochrone_minutes))
 
-        if st.button("Ver archivos"):
-            with st.spinner("Cargando archivos..."):
-                try:
-                    res = requests.get(f"{API_URL}/datasets/{selected_dataset}")
-                    if res.status_code == 200:
-                        data = res.json()
-                        st.session_state.current_files = data.get("files", [])
-                        st.success(f"Archivos: {st.session_state.current_files}")
-                    else:
-                        st.error("Error al cargar archivos")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+    with col_iso_btn2:
+        if st.button("Limpiar mapas", key="clear_iso", icon=":material/delete:", width="stretch"):
+            handle_cleanup("iso_walk_result")
+            handle_cleanup("iso_transit_result")
+        
+    if st.session_state.get("iso_walk_result") and st.session_state.get("iso_transit_result"):
+        st.subheader('Caminando {} minutos'.format(isochrone_minutes))
+        process_isochrone_result(st.session_state.iso_walk_result, isochrone_minutes, mode="walk", map_key="iso_walk_map")
+        st.subheader('Usando transporte público durante {} minutos'.format(isochrone_minutes))
+        process_isochrone_result(st.session_state.iso_transit_result, isochrone_minutes, mode="transit", map_key="iso_transit_map")
 
-        if st.session_state.get("current_files"):
-            st.subheader("Seleccionar Archivo")
-            selected_file = st.selectbox("Archivo", st.session_state.current_files)
+with desert_tab:
+    st.subheader("Desiertos de Salud por Comuna")
+    st.caption("Selecciona una comuna y un tiempo estimado para calcular los desiertos de salud")
 
-            limit = st.number_input("Límite de registros", min_value=5, max_value=1000, value=10)
+    col_des_comuna, col_des_slider = st.columns([2,1])
+    with col_des_comuna:
+        desert_comuna = st.selectbox("Comuna a calcular", comunas_disponibles, key="desert_comuna")
+        query_comuna = comuna_map[desert_comuna]
+    with col_des_slider:
+        desert_minutes = st.slider("Minutos estimados", 30, 60, 30, key="desert_minutes")
 
-            if st.button("Cargar datos"):
-                with st.spinner("Cargando datos..."):
-                    try:
-                        res = requests.get(f"{API_URL}/datasets/{selected_dataset}/{selected_file}?limit={limit}")
-                        if res.status_code == 200:
-                            data = res.json()
-                            st.success(f"Cargados {len(data)} registros")
-                            st.dataframe(data, width='stretch')
-                        else:
-                            st.error(f"Error: {res.json()}")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+    col_des_btn1, col_des_btn2 = st.columns(2)
+    with col_des_btn1:
+        if st.button("Calcular desiertos", type="primary", key="calc_desert", icon=":material/map_search:", width="stretch"):
+            st.session_state.desert_walk_result = call_health_desert_api("/api/v1/health-deserts", query_comuna, desert_minutes, spinner_text="Calculando desiertos de salud caminando {} minutos...".format(desert_minutes))
+            st.session_state.desert_transit_result = call_health_desert_api("/api/v1/transit/health-deserts", query_comuna, desert_minutes, spinner_text="Calculando desiertos de salud utilizando transporte público durante {} minutos...".format(desert_minutes))
 
-with tab2:
-    st.header("Centros de Salud")
-    if st.button("Cargar centros", key="cargar_centros"):
-        res = requests.get(f"{API_URL}/centros")
-        st.json(res.json())
+    with col_des_btn2:
+        if st.button("Limpiar mapas", key="clear_desert", icon=":material/delete:", width="stretch"):
+            handle_cleanup("desert_walk_result")
+            handle_cleanup("desert_transit_result")
 
-with tab3:
-    st.header("Datos Censo 2024")
-
-    if "censo_comunas" not in st.session_state:
-        st.session_state.censo_comunas = []
-
-    col1, col2 = st.columns([1, 3])
-
-    with col1:
-        if st.button("Cargar comunas"):
-            with st.spinner("Cargando comunas..."):
-                try:
-                    res = requests.get(f"{API_URL}/censo")
-                    if res.status_code == 200:
-                        data = res.json()
-                        st.session_state.censo_comunas = data.get("comunas", [])
-                        st.success(f"{len(st.session_state.censo_comunas)} comunas disponibles")
-                    else:
-                        st.error("Error al cargar comunas")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-    if st.session_state.censo_comunas:
-        with col2:
-            selected_comuna = st.selectbox("Seleccionar comuna", st.session_state.censo_comunas)
-
-        limit = st.number_input("Registros a mostrar", min_value=5, max_value=100, value=10, key="censo_limit")
-
-        if st.button("Ver datos"):
-            with st.spinner("Cargando datos..."):
-                try:
-                    res = requests.get(f"{API_URL}/censo/{selected_comuna}?limit={limit}")
-                    if res.status_code == 200:
-                        data = res.json()
-                        st.success(f"Datos de {selected_comuna}")
-                        st.dataframe(data, width='stretch')
-                    else:
-                        st.error(f"Error: {res.json()}")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-with tab4:
-    st.header("Isocronas Transporte Público")
-
-    if "censo_comunas" not in st.session_state or not st.session_state.censo_comunas:
-        try:
-            res = requests.get(f"{API_URL}/censo")
-            if res.status_code == 200:
-                st.session_state.censo_comunas = sorted(res.json().get("comunas", []))
-        except:
-            st.session_state.censo_comunas = []
-
-    comunas_disponibles = st.session_state.censo_comunas or ["SANTIAGO"]
-
-    col_f1, col_f2 = st.columns([1, 1])
-
-    with col_f1:
-        minutes = st.slider("Minutos", 15, 60, 30)
-        st.caption("Haz clic en el mapa para definir el origen:")
-
-        from streamlit_folium import st_folium
-        import folium
-
-        if "iso_origin" not in st.session_state:
-            st.session_state.iso_origin = {"lat": -33.46803, "lon": -70.67045}
-
-        m = folium.Map(
-            location=[st.session_state.iso_origin["lat"], st.session_state.iso_origin["lon"]],
-            zoom_start=14, height=300
-        )
-        folium.Marker(
-            [st.session_state.iso_origin["lat"], st.session_state.iso_origin["lon"]],
-            popup="Origen", icon=folium.Icon(color="red", icon="info-sign")
-        ).add_to(m)
-
-        map_data = st_folium(m, width="100%", height=300, key="picker_map")
-
-        if map_data and map_data.get("last_clicked"):
-            st.session_state.iso_origin = {
-                "lat": map_data["last_clicked"]["lat"],
-                "lon": map_data["last_clicked"]["lng"]
-            }
-
-        lat = st.session_state.iso_origin["lat"]
-        lon = st.session_state.iso_origin["lon"]
-
-        col_lat, col_lon = st.columns(2)
-        col_lat.metric("Latitud", f"{lat:.5f}")
-        col_lon.metric("Longitud", f"{lon:.5f}")
-
-    with col_f2:
-        st.subheader("Centros de la comuna")
-        st.info("Los centros se mostrarán en el mapa al calcular la isócrona.")
-
-    calc = st.button("Calcular isócrona", type="primary")
-
-    if calc:
-        with st.spinner("Calculando isócrona de transporte público..."):
-            try:
-                resp = requests.get(f"{API_URL}/api/v1/transit/isochrone", params={
-                    "lat": lat, "lon": lon,
-                    "minutes": minutes, "include_centers": False
-                })
-                if resp.status_code != 200:
-                    st.error(resp.json().get("detail", "Error desconocido"))
-                    st.session_state.iso_result = None
-                else:
-                    st.session_state.iso_result = resp.json()
-            except requests.exceptions.ConnectionError:
-                st.error(f"No se pudo conectar a la API en {API_URL}")
-                st.session_state.iso_result = None
-            except Exception as e:
-                st.error(f"Error: {e}")
-                st.session_state.iso_result = None
-
-    if st.session_state.get("iso_result"):
-        data = st.session_state.iso_result
-        features = data.get("features", [])
-        meta = data.get("metadata", {})
-
-        if len(features) < 2:
-            st.warning("No se pudo calcular la isócrona (sin datos de origen)")
-        else:
-            from streamlit_folium import st_folium
-            import folium
-
-            iso_feature = features[0]
-            origin_feature = features[1]
-
-            coords = iso_feature["geometry"]["coordinates"]
-            if not coords:
-                st.warning("No se pudo calcular la isócrona (sin paradas alcanzables)")
-            else:
-                geom_type = iso_feature["geometry"]["type"]
-                if geom_type == "MultiPolygon":
-                    bounds = coords[0][0]
-                else:
-                    bounds = coords[0]
-
-                if geom_type in ("Point", "LineString"):
-                    st.warning("El área calculada es muy pequeña para mostrarse en el mapa")
-                else:
-                    lats = [p[1] for p in bounds]
-                    lons = [p[0] for p in bounds]
-                    center_lat = sum(lats) / len(lats)
-                    center_lon = sum(lons) / len(lons)
-
-                    m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-                    folium.GeoJson(
-                        iso_feature,
-                        name="Isócrona",
-                        style_function=lambda x: {
-                            "fillColor": "#2563eb",
-                            "color": "#1d4ed8",
-                            "weight": 2,
-                            "fillOpacity": 0.3
-                        },
-                        tooltip=f"{minutes} min"
-                    ).add_to(m)
-
-                    folium.Marker(
-                        [origin_feature["geometry"]["coordinates"][1],
-                         origin_feature["geometry"]["coordinates"][0]],
-                        popup="Origen",
-                        icon=folium.Icon(color="red", icon="info-sign")
-                    ).add_to(m)
-
-                    st_folium(m, width="100%", height=500)
-
-                    col_a, col_b, col_c = st.columns(3)
-                    col_a.metric("Paradas cercanas", meta.get("origin_stops", 0))
-                    col_b.metric("Paradas alcanzables", meta.get("reachable_stops", 0))
-                    col_c.metric("Minutos", meta.get("minutes", minutes))
-
-        if st.button("Limpiar mapa", key="clear_iso"):
-            del st.session_state.iso_result
-            st.rerun()
-
-    st.divider()
-    st.subheader("Desiertos de Salud (por comuna)")
-
-    desert_comuna = st.selectbox("Comuna para desierto", comunas_disponibles, key="desert_comuna")
-    desert_minutes = st.slider("Minutos para desierto", 15, 60, 30, key="desert_min")
-
-    if st.button("Calcular desierto", type="secondary", key="calc_desert"):
-        with st.spinner("Calculando desiertos de salud..."):
-            try:
-                resp = requests.get(f"{API_URL}/api/v1/transit/health-deserts", params={
-                    "comuna": desert_comuna, "minutes": desert_minutes
-                })
-                if resp.status_code != 200:
-                    st.error(resp.json().get("detail", "Error desconocido"))
-                    st.session_state.desert_result = None
-                else:
-                    st.session_state.desert_result = resp.json()
-            except requests.exceptions.ConnectionError:
-                st.error(f"No se pudo conectar a la API en {API_URL}")
-                st.session_state.desert_result = None
-            except Exception as e:
-                st.error(f"Error: {e}")
-                st.session_state.desert_result = None
-
-    if st.session_state.get("desert_result"):
-        data = st.session_state.desert_result
-        features = data.get("features", [])
-        meta = data.get("metadata", {})
-
-        if features:
-            from streamlit_folium import st_folium
-            import folium
-
-            m = folium.Map(location=[-33.45, -70.65], zoom_start=11)
-
-            for f in features:
-                kind = f["properties"].get("kind", "")
-                if kind == "coverage":
-                    folium.GeoJson(
-                        f,
-                        name="Cobertura",
-                        style_function=lambda x: {
-                            "fillColor": "#10b981",
-                            "color": "#059669",
-                            "weight": 2,
-                            "fillOpacity": 0.4
-                        },
-                        tooltip="Cobertura"
-                    ).add_to(m)
-                elif kind == "health_desert":
-                    folium.GeoJson(
-                        f,
-                        name="Desierto",
-                        style_function=lambda x: {
-                            "fillColor": "#ef4444",
-                            "color": "#dc2626",
-                            "weight": 2,
-                            "fillOpacity": 0.4
-                        },
-                        tooltip="Desierto de salud"
-                    ).add_to(m)
-
-            st_folium(m, width="100%", height=500)
-
-            cols = st.columns(4)
-            cols[0].metric("Centros", meta.get("centers", 0))
-            cols[1].metric("Isocronas", meta.get("generated_isochrones", 0))
-            cols[2].metric("Cobertura", f"{meta.get('coverage_area', 0):.4f}°²")
-            cols[3].metric("Desierto", f"{meta.get('desert_pct', 0):.1f}%")
-
-        if st.button("Limpiar mapa", key="clear_desert"):
-            del st.session_state.desert_result
-            st.rerun()
+    if st.session_state.get("desert_walk_result") and st.session_state.get("desert_transit_result"):
+        st.subheader('Caminando {} minutos'.format(desert_minutes))
+        render_health_deserts(st.session_state.desert_walk_result, map_key="desert_walk_map")
+        st.subheader('Usando transporte público durante {} minutos'.format(desert_minutes))
+        render_health_deserts(st.session_state.desert_transit_result, map_key="desert_transit_map")
