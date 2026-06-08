@@ -285,10 +285,11 @@ class TransitHealthDesertService:
 
         return feature_collection(
             features,
+            center_list=centers,
             metadata={
                 "comuna": comuna_slug,
                 "minutes": minutes,
-                "centers": len(centers),
+                "centers_count": len(centers),
                 "generated_isochrones": len(polygons),
                 "coverage_area": coverage.area,
                 "desert_area": desert.area,

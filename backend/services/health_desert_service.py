@@ -249,10 +249,11 @@ class HealthDesertService:
 
         return feature_collection(
             features,
+            center_list=centers,
             metadata={
                 "comuna": comuna_slug,
                 "minutes": minutes,
-                "centers": len(centers),
+                "centers_count": len(centers),
                 "generated_isochrones": len(polygons),
                 "desert_pct": desert_percentage
             }

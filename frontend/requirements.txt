@@ -4,3 +4,9 @@ pandas
 geopandas
 folium
 streamlit-folium
+matplotlib
+rasterio
+contextily
+mapclassify
+matplotlib-scalebar
+openpyxl

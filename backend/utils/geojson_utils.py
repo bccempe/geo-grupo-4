@@ -52,11 +52,28 @@ def point_to_feature(lon: float, lat: float, properties=None):
     return geometry_to_feature(Point(lon, lat), properties=properties)
 
 
-def feature_collection(features, metadata=None):
+def feature_collection(features, center_list=None,metadata=None):
     """
     Arma un FeatureCollection GeoJSON.
     Se deja metadata como campo adicional para no perder información útil.
+    Si se proporciona center_list, convierte los centros a features Point
     """
+    if center_list:
+        for center in center_list:
+            lon = center.get("lng")
+            lat = center.get("lat")
+
+            if lon is not None and lat is not None:
+                center_feature = point_to_feature(
+                    lon,
+                    lat,
+                    properties={
+                        "kind": "health_center",
+                        "name": center.get("nombre", "Centro de salud")
+                    }
+                )
+                features.append(center_feature)
+
     payload = {
         "type": "FeatureCollection",
         "features": features

@@ -4,7 +4,10 @@ from ui_components import (
     process_isochrone_result,
     call_health_desert_api,
     render_health_deserts,
-    handle_cleanup
+)
+
+from export import(
+    export_health_desert_map
 )
 
 import streamlit as st
@@ -49,22 +52,17 @@ with iso_tab:
         st.metric("Latitud", f"{lat:.5f}")
         st.metric("Longitud", f"{lon:.5f}")
 
-    col_iso_btn1, col_iso_btn2 = st.columns(2)
-    with col_iso_btn1:
-        if st.button("Calcular isócronas", type="primary", key="calc_iso", icon=":material/map_search:", width="stretch"):
-            st.session_state.iso_walk_result = call_isochrone_api("/api/v1/isochrone", lat, lon, isochrone_minutes, spinner_text="Calculando isócrona caminando {} minutos...".format(isochrone_minutes))
-            st.session_state.iso_transit_result = call_isochrone_api("/api/v1/transit/isochrone", lat, lon, isochrone_minutes, spinner_text="Calculando isócrona usando transporte público durante {} minutos...".format(isochrone_minutes))
+    if st.button("Calcular isócronas", type="primary", key="calc_iso", icon=":material/map_search:", width="stretch"):
+        st.session_state.iso_walk_result = call_isochrone_api("/api/v1/isochrone", lat, lon, isochrone_minutes, spinner_text="Calculando isócrona caminando {} minutos...".format(isochrone_minutes))
+        st.session_state.iso_transit_result = call_isochrone_api("/api/v1/transit/isochrone", lat, lon, isochrone_minutes, spinner_text="Calculando isócrona usando transporte público durante {} minutos...".format(isochrone_minutes))
 
-    with col_iso_btn2:
-        if st.button("Limpiar mapas", key="clear_iso", icon=":material/delete:", width="stretch"):
-            handle_cleanup("iso_walk_result")
-            handle_cleanup("iso_transit_result")
-        
     if st.session_state.get("iso_walk_result") and st.session_state.get("iso_transit_result"):
         st.subheader('Caminando {} minutos'.format(isochrone_minutes))
         process_isochrone_result(st.session_state.iso_walk_result, isochrone_minutes, mode="walk", map_key="iso_walk_map")
+
         st.subheader('Usando transporte público durante {} minutos'.format(isochrone_minutes))
         process_isochrone_result(st.session_state.iso_transit_result, isochrone_minutes, mode="transit", map_key="iso_transit_map")
+
 
 with desert_tab:
     st.subheader("Desiertos de Salud por Comuna")
@@ -77,19 +75,49 @@ with desert_tab:
     with col_des_slider:
         desert_minutes = st.slider("Minutos estimados", 30, 60, 30, key="desert_minutes")
 
-    col_des_btn1, col_des_btn2 = st.columns(2)
-    with col_des_btn1:
-        if st.button("Calcular desiertos", type="primary", key="calc_desert", icon=":material/map_search:", width="stretch"):
-            st.session_state.desert_walk_result = call_health_desert_api("/api/v1/health-deserts", query_comuna, desert_minutes, spinner_text="Calculando desiertos de salud caminando {} minutos...".format(desert_minutes))
-            st.session_state.desert_transit_result = call_health_desert_api("/api/v1/transit/health-deserts", query_comuna, desert_minutes, spinner_text="Calculando desiertos de salud utilizando transporte público durante {} minutos...".format(desert_minutes))
-
-    with col_des_btn2:
-        if st.button("Limpiar mapas", key="clear_desert", icon=":material/delete:", width="stretch"):
-            handle_cleanup("desert_walk_result")
-            handle_cleanup("desert_transit_result")
+    if st.button("Calcular desiertos", type="primary", key="calc_desert", icon=":material/map_search:", width="stretch"):
+        st.session_state.desert_walk_result = call_health_desert_api("/api/v1/health-deserts", query_comuna, desert_minutes, spinner_text="Calculando desiertos de salud caminando {} minutos...".format(desert_minutes))
+        st.session_state.desert_transit_result = call_health_desert_api("/api/v1/transit/health-deserts", query_comuna, desert_minutes, spinner_text="Calculando desiertos de salud utilizando transporte público durante {} minutos...".format(desert_minutes))
 
     if st.session_state.get("desert_walk_result") and st.session_state.get("desert_transit_result"):
         st.subheader('Caminando {} minutos'.format(desert_minutes))
         render_health_deserts(st.session_state.desert_walk_result, map_key="desert_walk_map")
+
+        buf_walk = export_health_desert_map(
+            st.session_state.desert_walk_result,
+            desert_minutes,
+            desert_comuna,
+            "caminando"
+        )
+        if buf_walk:
+            st.download_button(
+                label="Exportar a PNG",
+                type="primary",
+                data=buf_walk,
+                file_name=f"health_desert_walk_{desert_minutes}min.png",
+                mime="image/png",
+                key="export_desert_walk",
+                icon=":material/file_export:",
+                width="stretch"
+            )
+
         st.subheader('Usando transporte público durante {} minutos'.format(desert_minutes))
         render_health_deserts(st.session_state.desert_transit_result, map_key="desert_transit_map")
+
+        buf_transit = export_health_desert_map(
+            st.session_state.desert_transit_result,
+            desert_minutes,
+            desert_comuna,
+            "usando transporte público"
+        )
+        if buf_transit:
+            st.download_button(
+                label="Exportar a PNG",
+                type="primary",
+                data=buf_transit,
+                file_name=f"health_desert_transit_{desert_minutes}min.png",
+                mime="image/png",
+                key="export_desert_transit",
+                icon=":material/file_export:",
+                width="stretch"
+            )

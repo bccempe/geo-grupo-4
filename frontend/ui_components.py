@@ -66,7 +66,6 @@ def calculate_isochrone_geometry(iso_feature: dict):
     return bounds, lats, lons, (center_lat, center_lon, geom_type)
 
 def render_isochrone_map(iso_feature: dict, origin_feature: dict, health_centers: list, center_lat: float, center_lon: float, minutes: int, map_key: str):
-    st.write(health_centers)
     m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
     folium.GeoJson(
         iso_feature,
@@ -91,30 +90,12 @@ def render_isochrone_map(iso_feature: dict, origin_feature: dict, health_centers
         folium.Marker(
             [center["geometry"]["coordinates"][1], center["geometry"]["coordinates"][0]],
             popup=center["properties"].get("name", center["properties"].get("nombre", "Centro de salud")),
-            icon=folium.Icon(color="blue", icon="heart")
+            icon=folium.Icon(color="green", icon="heart")
         ).add_to(m)
 
     st_folium(m, width="100%", height=500, key=map_key)
 
-def display_isochrone_stats(metadata: dict, mode: str, default_minutes: int):
-    if mode == "walk":
-        a_label = "Centros cercanos"
-        b_label = "Centros alcanzables"
-    else:
-        a_label = "Paradas cercanas"
-        b_label = "Paradas alcanzables"
-    col_a, col_b, col_c = st.columns(3)
-    col_a.metric(a_label, metadata.get("origin_stops", 0))
-    col_b.metric(b_label, metadata.get("reachable_stops", 0))
-    col_c.metric("Minutos", metadata.get("minutes", default_minutes))
-
-def handle_cleanup(session_key: str):
-    if session_key in st.session_state:
-        del st.session_state[session_key]
-    st.rerun()
-
 def process_isochrone_result(result: dict, minutes: int, mode: str, map_key: str):
-    st.write(result) 
     if not result:
         return
     features = result.get("features", [])
@@ -144,7 +125,6 @@ def process_isochrone_result(result: dict, minutes: int, mode: str, map_key: str
             return
         center_lat, center_lon, _ = center_info
         render_isochrone_map(iso_feature, origin_feature, health_centers, center_lat, center_lon, minutes, map_key)
-        display_isochrone_stats(meta, mode, minutes)
     else:
         st.warning("No se pudo calcular la isócrona (sin datos de origen)")
         return
@@ -170,7 +150,6 @@ def call_health_desert_api(endpoint: str, comuna: str, minutes: int, api_url: st
         return None
 
 def render_health_deserts(data: dict, map_key: str = "desert_transit"):
-    st.write(data)
     features = data.get("features", [])
     meta = data.get("metadata", {})
 
@@ -200,6 +179,14 @@ def render_health_deserts(data: dict, map_key: str = "desert_transit"):
                 "fillOpacity": 0.4
             }
             tooltip = "Desierto de salud"
+        elif kind == "health_center":
+            folium.Marker(
+                [feature["geometry"]["coordinates"][1], feature["geometry"]["coordinates"][0]],
+                popup=feature["properties"].get("name", feature["properties"].get("nombre", "Centro de salud")),
+                icon=folium.Icon(color="green", icon="heart")
+            ).add_to(m)
+            
+
         if style:
             folium.GeoJson(
                 feature,
@@ -210,7 +197,6 @@ def render_health_deserts(data: dict, map_key: str = "desert_transit"):
 
     st_folium(m, width="100%", height=500, key=map_key)
 
-    cols = st.columns(3)
-    cols[0].metric("Centros", meta.get("centers", 0))
-    cols[1].metric("Isocronas", meta.get("generated_isochrones", 0))
-    cols[2].metric("Nivel de desiertos", f"{meta.get('desert_pct', 0):.1f}%")
+    cols = st.columns(2)
+    cols[0].metric("Centros en la comuna", meta.get("centers_count", 0))
+    cols[1].metric("Nivel de desiertos", f"{meta.get('desert_pct', 0):.1f}%")
