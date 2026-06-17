@@ -40,7 +40,7 @@ def get_health_deserts(
 
     except ValueError as exc:
 
-        print("VALUE ERROR:")
+        print("VALUE ERROR soy yo el error:")
         print(str(exc))
 
         raise HTTPException(
