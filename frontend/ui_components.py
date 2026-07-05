@@ -2,11 +2,103 @@ import os
 import requests
 import streamlit as st
 import folium
+import branca
+import geopandas as gpd
 from streamlit_folium import st_folium
 from shapely.geometry import shape
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
+def build_population_coverage_gdfs(data: dict):
+    features = data.get("features", [])
+    block_rows = []
+    center_rows = []
+
+    for feature in features:
+        props = feature.get("properties", {})
+        kind = props.get("kind")
+        geom_data = feature.get("geometry")
+
+        if not geom_data:
+            continue
+
+        geom = shape(geom_data)
+
+        if kind == "census_block":
+            block_rows.append({
+                **props,
+                "geometry": geom,
+            })
+        elif kind == "health_center":
+            center_rows.append({
+                **props,
+                "geometry": geom,
+            })
+
+    if block_rows:
+        blocks_gdf = gpd.GeoDataFrame(
+            block_rows,
+            geometry="geometry",
+            crs="EPSG:4326",
+        )
+    else:
+        blocks_gdf = gpd.GeoDataFrame(
+            columns=["geometry"],
+            geometry="geometry",
+            crs="EPSG:4326",
+        )
+
+    if center_rows:
+        centers_gdf = gpd.GeoDataFrame(
+            center_rows,
+            geometry="geometry",
+            crs="EPSG:4326",
+        )
+    else:
+        centers_gdf = gpd.GeoDataFrame(
+            columns=["geometry"],
+            geometry="geometry",
+            crs="EPSG:4326",
+        )
+
+    return blocks_gdf, centers_gdf
+
+def calculate_coverage_statistics(data: dict) -> dict:
+    blocks_gdf, _ = build_population_coverage_gdfs(data)
+
+    total_population = blocks_gdf["population"].fillna(0).sum()
+    covered_population = blocks_gdf["covered_population"].fillna(0).sum()
+    elderly_population = blocks_gdf["elderly_population"].fillna(0).sum()
+    covered_elderly = blocks_gdf["covered_elderly_population"].fillna(0).sum()
+
+    coverage_pct = 0
+    if total_population > 0:
+        coverage_pct = (covered_population / total_population) * 100
+
+    return {
+        "total_population": int(total_population),
+        "covered_population": int(covered_population),
+        "elderly_population": int(elderly_population),
+        "covered_elderly_population": int(covered_elderly),
+        "coverage_pct": coverage_pct,
+    }
+
+def render_coverage_statistics(stats: dict):
+    col_data, col_coverage = st.columns([2,1])
+
+    with col_data:
+        col_population, col_elderly = st.columns(2)
+
+        with col_population:
+            st.metric("Población total", f"{stats['total_population']:,}")
+            st.metric("Población cubierta", f"{stats['covered_population']:,}")
+        
+        with col_elderly:
+            st.metric("Adultos mayores", f"{stats['elderly_population']:,}")
+            st.metric("Mayores cubiertos", f"{stats['covered_elderly_population']:,}")
+    
+    with col_coverage:
+        st.metric("Cobertura", f"{stats['coverage_pct']:.1f}%")
 
 def render_location_picker(
     map_key: str,
@@ -230,8 +322,8 @@ def render_health_deserts(data: dict, map_key: str = "desert_transit"):
 
         if kind == "coverage":
             style = {
-                "fillColor": "#bbf7d0",
-                "color": "#22c55e",
+                "fillColor": "#6a9f58",
+                "color": "#85b6b2",
                 "weight": 2,
                 "fillOpacity": 0.45,
             }
@@ -239,8 +331,8 @@ def render_health_deserts(data: dict, map_key: str = "desert_transit"):
 
         elif kind == "health_desert":
             style = {
-                "fillColor": "#fecaca",
-                "color": "#ef4444",
+                "fillColor": "#f1a2a9",
+                "color": "#d1615d",
                 "weight": 2,
                 "fillOpacity": 0.45,
             }
@@ -250,7 +342,7 @@ def render_health_deserts(data: dict, map_key: str = "desert_transit"):
             folium.Marker(
                 [feature["geometry"]["coordinates"][1], feature["geometry"]["coordinates"][0]],
                 popup=feature["properties"].get("name", feature["properties"].get("nombre", "Centro de salud")),
-                icon=folium.Icon(color="green", icon="heart"),
+                icon=folium.Icon(color="green", icon="glyphicon-plus"),
             ).add_to(m)
             continue
 
@@ -262,33 +354,15 @@ def render_health_deserts(data: dict, map_key: str = "desert_transit"):
                 tooltip=tooltip,
             ).add_to(m)
 
-    folium.Marker(
-        [-33.45, -70.65],
-        icon=folium.DivIcon(
-            html="""
-            <div style="
-                position: fixed;
-                top: 15px;
-                right: 15px;
-                z-index:9999;
-                font-size:28px;
-                font-weight:bold;
-                background:white;
-                padding:8px 10px;
-                border-radius:8px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            ">↑ N</div>
-            """
-        ),
-    ).add_to(m)
 
     legend = """
     <div style="
         position: fixed;
         bottom: 45px;
         left: 45px;
-        width: 250px;
-        background-color: white;
+        width: 200px;
+        background-color: rgba(255,255,255,0.95);
+        color: #111;
         z-index:9999;
         padding: 10px 12px;
         border-radius: 10px;
@@ -297,11 +371,15 @@ def render_health_deserts(data: dict, map_key: str = "desert_transit"):
         font-size: 13px;
     ">
         <b>Desiertos de salud</b><br><br>
-        <i style="background:#bbf7d0;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #22c55e"></i>
+        <i style="background:#85b6b2;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #6a9f58"></i>
         Cobertura<br><br>
-        <i style="background:#fecaca;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #ef4444"></i>
+        <i style="background:#f1a2a9;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #d1615d"></i>
         Desierto de salud<br><br>
-        <i style="background:#86efac;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #16a34a"></i>
+        <span style="display:inline-block;width:16px;height:24px;margin-right:8px;vertical-align:middle;">
+            <svg viewBox="0 0 24 24" width="16" height="24" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#16a34a" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zM12 11.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/>
+            </svg>
+        </span>
         Centro de salud
     </div>
     """
@@ -425,16 +503,14 @@ def render_population_coverage(data: dict, map_key: str = "population_map"):
         props = feature.get("properties", {})
         ratio = float(props.get("coverage_ratio", 0) or 0)
 
-        if ratio <= 0:
-            color = "#fecaca"  # rojo claro
-        elif ratio <= 0.25:
-            color = "#fca5a5"
+        if ratio >= 0 and ratio <= 0.25:
+            color = "#9ecae1"  
         elif ratio <= 0.50:
-            color = "#fde68a"  # amarillo claro
+            color = "#6baed6" 
         elif ratio <= 0.75:
-            color = "#93c5fd"  # celeste claro
+            color = "#3182bd"  
         else:
-            color = "#86efac"  # verde claro
+            color = "#08519c"  
 
         return {
             "fillColor": color,
@@ -446,20 +522,8 @@ def render_population_coverage(data: dict, map_key: str = "population_map"):
     for feature in features:
         props = feature.get("properties", {})
         kind = props.get("kind", "")
-
-        if kind == "coverage":
-            folium.GeoJson(
-                feature,
-                name="Cobertura",
-                style_function=lambda x: {
-                    "fillColor": "#bfdbfe",
-                    "color": "#2563eb",
-                    "weight": 2,
-                    "fillOpacity": 0.22,
-                },
-                tooltip="Cobertura general",
-            ).add_to(m)
-            continue
+        style = {}
+        tooltip = ""
 
         if kind == "health_center":
             coords = feature.get("geometry", {}).get("coordinates", [])
@@ -467,7 +531,7 @@ def render_population_coverage(data: dict, map_key: str = "population_map"):
                 folium.Marker(
                     [coords[1], coords[0]],
                     popup=props.get("name", props.get("nombre", "Centro de salud")),
-                    icon=folium.Icon(color="green", icon="heart"),
+                    icon=folium.Icon(color="green", icon="glyphicon-plus"),
                 ).add_to(m)
             continue
 
@@ -477,11 +541,9 @@ def render_population_coverage(data: dict, map_key: str = "population_map"):
             ratio = props.get("coverage_ratio", 0)
 
             tooltip = f"""
-            <b>Manzana:</b> {props.get('block_id', '')}<br>
             <b>Población:</b> {float(population):.0f}<br>
             <b>Adultos mayores:</b> {float(elderly):.0f}<br>
             <b>Cobertura:</b> {float(ratio) * 100:.1f}%<br>
-            <b>Estado:</b> {props.get('status', '')}
             """
 
             folium.GeoJson(
@@ -491,25 +553,13 @@ def render_population_coverage(data: dict, map_key: str = "population_map"):
             ).add_to(m)
             continue
 
-    folium.Marker(
-        [-33.45, -70.65],
-        icon=folium.DivIcon(
-            html="""
-            <div style="
-                position: fixed;
-                top: 15px;
-                right: 15px;
-                z-index:9999;
-                font-size:28px;
-                font-weight:bold;
-                background:white;
-                padding:8px 10px;
-                border-radius:8px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            ">↑ N</div>
-            """
-        ),
-    ).add_to(m)
+        if style:
+            folium.GeoJson(
+                feature,
+                name=tooltip,
+                style_function=lambda x, s=style: s,
+                tooltip=tooltip,
+            ).add_to(m)
 
     legend = """
     <div style="
@@ -517,7 +567,8 @@ def render_population_coverage(data: dict, map_key: str = "population_map"):
         bottom: 45px;
         left: 45px;
         width: 260px;
-        background-color: white;
+        background-color: rgba(255,255,255,0.95);
+        color: #111;
         z-index:9999;
         padding: 10px 12px;
         border-radius: 10px;
@@ -525,19 +576,15 @@ def render_population_coverage(data: dict, map_key: str = "population_map"):
         box-shadow: 0 2px 10px rgba(0,0,0,0.12);
         font-size: 13px;
     ">
-        <b>Cobertura poblacional</b><br><br>
-        <i style="background:#86efac;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #22c55e"></i>
+        <b>Cobertura por manzana</b><br><br>
+        <i style="background:#08519c;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #08519c"></i>
         Alta (&gt;75%)<br><br>
-        <i style="background:#93c5fd;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #3b82f6"></i>
+        <i style="background:#3182bd;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #3182bd"></i>
         Media (50-75%)<br><br>
-        <i style="background:#fde68a;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #eab308"></i>
+        <i style="background:#6baed6;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #6baed6"></i>
         Baja (25-50%)<br><br>
-        <i style="background:#fca5a5;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #ef4444"></i>
+        <i style="background:#9ecae1;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #9ecae1"></i>
         Muy baja (0-25%)<br><br>
-        <i style="background:#bfdbfe;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #2563eb"></i>
-        Cobertura general<br><br>
-        <i style="background:#86efac;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #16a34a"></i>
-        Centro de salud
     </div>
     """
     m.get_root().html.add_child(folium.Element(legend))

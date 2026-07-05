@@ -7,9 +7,15 @@ from ui_components import (
     call_population_coverage_api,
     render_population_coverage,
     call_population_coverage_rm,
+    calculate_coverage_statistics,
+    render_coverage_statistics
 )
 
-from export import export_health_desert_map
+from export import (
+    export_health_desert_map, 
+    export_population_coverage_map,
+    export_full_population_coverage_map
+)
 
 import streamlit as st
 import unicodedata
@@ -46,8 +52,8 @@ st.title("Accesibilidad a Centros de Salud en la Región Metropolitana")
 
 iso_tab, desert_tab, coverage_tab = st.tabs([
     "Isócronas",
-    "Desiertos de Salud",
-    "Cobertura Poblacional"
+    "Desiertos de salud",
+    "Cobertura poblacional"
 ])
 
 with iso_tab:
@@ -104,7 +110,7 @@ with iso_tab:
         )
 
 with desert_tab:
-    st.subheader("Desiertos de Salud por Comuna")
+    st.subheader("Desiertos de salud por comuna")
     st.caption("Selecciona una comuna y un tiempo estimado para calcular los desiertos de salud")
 
     col_des_comuna, col_des_slider = st.columns([2, 1])
@@ -187,29 +193,34 @@ with desert_tab:
             
 with coverage_tab:
 
-    st.subheader("Cobertura Poblacional")
+    st.subheader("Cobertura poblacional")
 
-    coverage_mode = st.radio(
-        "Modo",
-        [
-            "Comuna",
-            "Región Metropolitana"
-        ],
-        horizontal=True
-    )
+    st.info("La cobertura poblacional se refiere al porcentaje de la población que puede acceder a un centro de salud primaria (CESFAM, SAPU) movilizándose en auto durante una determinada cantidad de tiempo.")
 
-    coverage_minutes = st.slider(
-        "Minutos",
-        5,
-        60,
-        15,
-        key="coverage_minutes"
-    )
+    col_cov_mode, col_cov_minutes = st.columns([1,1])
+    with col_cov_mode:
+        coverage_mode = st.radio(
+            "Modo",
+            [
+                "Por comuna",
+                "Región Metropolitana completa"
+            ],
+            horizontal=True
+        )
+
+    with col_cov_minutes:
+        coverage_minutes = st.slider(
+            "Minutos",
+            5,
+            60,
+            15,
+            key="coverage_minutes"
+        )
 
     # ==================================================
     # COBERTURA POR COMUNA
     # ==================================================
-    if coverage_mode == "Comuna":
+    if coverage_mode == "Por comuna":
 
         coverage_comuna = st.selectbox(
             "Comuna",
@@ -223,7 +234,9 @@ with coverage_tab:
 
         if st.button(
             "Calcular cobertura",
-            key="coverage_btn"
+            type="primary",
+            key="coverage_btn",
+            icon=":material/map_search:"
         ):
 
             st.session_state.coverage_result = (
@@ -245,6 +258,29 @@ with coverage_tab:
                 map_key="coverage_map"
             )
 
+            stats = calculate_coverage_statistics(
+                st.session_state.coverage_result
+            )
+            render_coverage_statistics(stats)
+
+            buf_coverage_comuna = export_population_coverage_map(
+                st.session_state.coverage_result,
+                minutes=coverage_minutes,
+                comuna=coverage_comuna,
+                include_cartographic_elements=True
+            )
+            if buf_coverage_comuna:
+                st.download_button(
+                    label="Exportar a PNG",
+                    type="primary",
+                    data=buf_coverage_comuna,
+                    file_name=f"population_coverage_{query_comuna}_{coverage_minutes}min.png",
+                    mime="image/png",
+                    key="export_coverage_comuna",
+                    icon=":material/file_export:",
+                    width="stretch"
+                )
+
     # ==================================================
     # COBERTURA RM
     # ==================================================
@@ -258,7 +294,9 @@ with coverage_tab:
 
         if st.button(
             "Generar mapa RM",
-            key="coverage_rm_btn"
+            key="coverage_rm_btn",
+            type="primary",
+            icon=":material/map_search:"
         ):
 
             with st.spinner(
@@ -274,30 +312,33 @@ with coverage_tab:
                 )
 
                 if rm_result:
-
-                    from export_population_coverage import (
-                        export_population_coverage_map
-                    )
-
-                    png_buffer = (
-                        export_population_coverage_map(
+                    st.session_state.rm_result = rm_result
+                    st.session_state.stats_rm = calculate_coverage_statistics(rm_result)
+                    st.session_state.png_buffer = (
+                        export_full_population_coverage_map(
                             rm_result,
-                            minutes=coverage_minutes,
-                            title="Región Metropolitana"
+                            minutes=coverage_minutes
                         )
                     )
+                
+                else:
+                    st.session_state.rm_result = None
+                    st.session_state.stats_rm = None
+                    st.session_state.png_buffer = None
 
-                    st.success(
-                        "Mapa generado correctamente."
-                    )
+        if st.session_state.get("rm_result"):
+            render_coverage_statistics(st.session_state.stats_rm)
 
-                    st.download_button(
-                        label="Descargar mapa PNG",
-                        data=png_buffer,
-                        file_name=(
-                            f"cobertura_rm_"
-                            f"{coverage_minutes}min.png"
+            if st.session_state.get("png_buffer"):
+                st.download_button(
+                    label="Exportar a PNG",
+                    data=st.session_state.png_buffer,
+                    file_name=(
+                        f"cobertura_rm_"
+                        f"{coverage_minutes}min.png"
                         ),
-                        mime="image/png",
-                        use_container_width=True
-                    )
+                    mime="image/png",
+                    icon=":material/file_export:",
+                    type="primary",
+                    width="stretch"
+                )
