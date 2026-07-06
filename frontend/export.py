@@ -150,5 +150,5 @@ def export_full_population_coverage_map(data: dict, minutes: int):
         minutes,
         title="Cobertura poblacional",
         comuna="Región Metropolitana",
-        include_cartographic_elements=False,
+        include_cartographic_elements=True,
     )
