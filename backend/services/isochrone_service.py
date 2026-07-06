@@ -178,14 +178,23 @@ class IsochroneService:
             )
 
         reachable_subgraph = graph.subgraph(
-            reachable_nodes
+                reachable_nodes
         ).copy()
+
+            # ===============================
+            # Límite comunal
+            # ===============================
+
+        boundary = self.graph_repository.load_boundary_polygon(
+                comuna_slug
+        )
 
         try:
 
-            polygon = build_isochrone_polygon_from_graph(
-                reachable_subgraph
-            )
+                polygon = build_isochrone_polygon_from_graph(
+                    reachable_subgraph,
+                    boundary=boundary
+                )
 
         except Exception as e:
 
