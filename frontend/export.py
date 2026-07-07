@@ -8,32 +8,178 @@ import pandas as pd
 import textwrap
 
 from ui_components import build_population_coverage_gdfs
+from matplotlib.lines import Line2D
 
-def _add_cartographic_elements(ax, source="OpenStreetMap", crs_text="EPSG:32719", elaboration="Elab.: Grupo 4"):
-    scalebar = ScaleBar(1, units="m", location="lower right", box_alpha=0.6, border_pad=2)
+
+def _add_cartographic_elements(
+    ax,
+    source="OpenStreetMap",
+    crs_text="EPSG:32719",
+    elaboration="Elaboración propia"
+):
+    """
+    Agrega elementos cartográficos comunes.
+    """
+
+    # =====================
+    # Escala
+    # =====================
+
+    scalebar = ScaleBar(
+        dx=1,
+        units="m",
+        location="lower right",
+        box_alpha=0.85,
+        scale_loc="bottom"
+    )
+
     ax.add_artist(scalebar)
+
+    # =====================
+    # Norte
+    # =====================
 
     ax.annotate(
         "N",
-        xy=(0.95, 0.85),
-        xytext=(0.95, 0.78),
+        xy=(0.95, 0.90),
+        xytext=(0.95, 0.80),
         xycoords="axes fraction",
-        textcoords="axes fraction",
-        fontsize=14,
-        fontweight="bold",
+        fontsize=16,
         ha="center",
-        va="center",
-        arrowprops=dict(facecolor="black", width=4, headwidth=12)
+        fontweight="bold",
+        arrowprops=dict(
+            facecolor="black",
+            width=4,
+            headwidth=12
+        )
     )
 
+    # =====================
+    # Fuente
+    # =====================
+
     ax.text(
-        0.02,
-        0.02,
-        f"Fuente: {source} | CRS: {crs_text} | {elaboration}",
+        0.01,
+        0.01,
+        (
+            f"Fuente: {source}\n"
+            f"Sistema de referencia: {crs_text}\n"
+            f"{elaboration}"
+        ),
         transform=ax.transAxes,
         fontsize=8,
-        bbox=dict(boxstyle="round", facecolor="white", alpha=0.7)
+        bbox=dict(
+            facecolor="white",
+            alpha=0.9
+        )
     )
+
+def _add_health_desert_legend(ax):
+
+    legend = [
+
+        Line2D(
+            [0],
+            [0],
+            marker="s",
+            color="w",
+            label="Cobertura",
+            markerfacecolor="#6a9f58",
+            markersize=14
+        ),
+
+        Line2D(
+            [0],
+            [0],
+            marker="s",
+            color="w",
+            label="Desierto de salud",
+            markerfacecolor="#f1a2a9",
+            markersize=14
+        ),
+
+        Line2D(
+            [0],
+            [0],
+            marker="*",
+            color="green",
+            label="Centro de salud",
+            linestyle="None",
+            markersize=14
+        )
+    ]
+
+    ax.legend(
+        handles=legend,
+        title="Simbología",
+        loc="upper left",
+        framealpha=0.95
+    )
+
+def _add_population_legend(ax):
+
+    legend = [
+
+        Line2D(
+            [0],
+            [0],
+            marker="s",
+            color="w",
+            label="0 - 25 %",
+            markerfacecolor="#deebf7",
+            markersize=14
+        ),
+
+        Line2D(
+            [0],
+            [0],
+            marker="s",
+            color="w",
+            label="25 - 50 %",
+            markerfacecolor="#9ecae1",
+            markersize=14
+        ),
+
+        Line2D(
+            [0],
+            [0],
+            marker="s",
+            color="w",
+            label="50 - 75 %",
+            markerfacecolor="#4292c6",
+            markersize=14
+        ),
+
+        Line2D(
+            [0],
+            [0],
+            marker="s",
+            color="w",
+            label="75 - 100 %",
+            markerfacecolor="#08519c",
+            markersize=14
+        ),
+
+        Line2D(
+            [0],
+            [0],
+            marker="*",
+            color="#2563eb",
+            label="Centro de salud",
+            linestyle="None",
+            markersize=14
+        )
+
+    ]
+
+    ax.legend(
+        handles=legend,
+        title="Simbología",
+        loc="upper left",
+        framealpha=0.95
+    )
+
+
 
 def export_health_desert_map(data: dict, minutes: int, comuna: str, mode: str):
     """Exporta desierto de salud como PNG estilizado"""
@@ -68,6 +214,7 @@ def export_health_desert_map(data: dict, minutes: int, comuna: str, mode: str):
 
     if not points.empty:
         points.plot(ax=ax, color="green", markersize=100, marker="*")
+    _add_health_desert_legend(ax)
 
     title = f"Desiertos de salud en {comuna} ({mode}) - {minutes} minutos"
     ax.set_title(textwrap.fill(title, width=50), fontsize=14, fontweight="bold")
@@ -112,7 +259,7 @@ def export_population_coverage_map(
         scheme="NaturalBreaks",
         k=4,
         edgecolor="none",
-        legend=True,
+        legend=False,
         legend_kwds={
             "title": "Nivel de cobertura (%)",
             "loc": "upper left",
@@ -128,7 +275,7 @@ def export_population_coverage_map(
             marker="*",
             label="Centro de salud",
         )
-
+    _add_population_legend(ax)
     if comuna:
         title = f"{title} - {comuna}"
 
