@@ -4,6 +4,7 @@ from shapely.ops import unary_union
 from shapely.geometry import shape
 
 from repository.cov_poblacional_repository import CensusRepository
+from repository.gtfs_repository import GTFSRepository
 from services.health_desert_service import HealthDesertService
 from utils.comuna_util import normalize_to_slug
 from utils.geojson_utils import geometry_to_feature, feature_collection
@@ -74,6 +75,8 @@ class PopulationCoverageService:
     def __init__(self):
         self.census_repository = CensusRepository()
         self.health_desert_service = HealthDesertService()
+
+        self.gtfs_repo = GTFSRepository()
 
     def _fix_geometry(self, geom: BaseGeometry | None) -> BaseGeometry | None:
         if geom is None:
@@ -203,6 +206,11 @@ class PopulationCoverageService:
     def build_population_coverage(self, comuna: str, minutes: float = 15):
         comuna_slug = normalize_to_slug(comuna)
 
+        centers = self.gtfs_repo.get_centers_by_comuna(comuna_slug)
+
+        if not centers:
+            raise ValueError(f"No se encontraron centros de salud para {comuna_slug}")
+
         coverage_polygon = self._extract_coverage_polygon(
             comuna=comuna_slug,
             minutes=minutes
@@ -233,6 +241,7 @@ class PopulationCoverageService:
 
         return feature_collection(
             features,
+            center_list=centers,
             metadata={
                 "scope": "comuna",
                 "minutes": minutes,

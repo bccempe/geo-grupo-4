@@ -164,7 +164,7 @@ def _add_population_legend(ax):
             [0],
             [0],
             marker="*",
-            color="#2563eb",
+            color="green",
             label="Centro de salud",
             linestyle="None",
             markersize=14
@@ -258,7 +258,7 @@ def export_population_coverage_map(
         cmap="Blues",
         scheme="NaturalBreaks",
         k=4,
-        edgecolor="none",
+        edgecolor="#5b6b7a",
         legend=False,
         legend_kwds={
             "title": "Nivel de cobertura (%)",
@@ -267,10 +267,11 @@ def export_population_coverage_map(
         },
     )
 
+
     if not centers_gdf.empty:
         centers_gdf.plot(
             ax=ax,
-            color="#2563eb",
+            color="green",
             markersize=150,
             marker="*",
             label="Centro de salud",
