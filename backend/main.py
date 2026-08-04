@@ -11,6 +11,7 @@ from controllers.health_desert_controller import router as health_desert_router
 from controllers.transit_isochrone_controller import router as transit_isochrone_router
 from controllers.car_desert_controller import router as car_health_desert_router
 from controllers.population_coverage_controller import router as population_coverage_router
+from controllers.geocode_controller import router as geocode_router
 
 from utils.data_loader import (
     get_available_datasets,
@@ -36,6 +37,7 @@ app.include_router(health_desert_router)
 app.include_router(transit_isochrone_router)
 app.include_router(car_health_desert_router)
 app.include_router(population_coverage_router)
+app.include_router(geocode_router)
 
 @app.get("/")
 def read_root():

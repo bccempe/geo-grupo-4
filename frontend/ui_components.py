@@ -100,33 +100,115 @@ def render_coverage_statistics(stats: dict):
     with col_coverage:
         st.metric("Cobertura", f"{stats['coverage_pct']:.1f}%")
 
+def call_geocode_autocomplete_api(query: str, limit: int = 5, api_url: str = None):
+    api = api_url or API_URL
+    url = f"{api}/api/v1/geocode/autocomplete"
+    try:
+        resp = requests.get(url, params={"q": query, "limit": limit}, timeout=10)
+        if resp.status_code == 200:
+            return resp.json().get("results", [])
+    except Exception as e:
+        print(f"Error llamando autocomplete API: {e}")
+    return []
+
+def call_reverse_geocode_api(lat: float, lon: float, api_url: str = None):
+    api = api_url or API_URL
+    url = f"{api}/api/v1/geocode/reverse"
+    try:
+        resp = requests.get(url, params={"lat": lat, "lon": lon}, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        print(f"Error llamando reverse geocode API: {e}")
+    return None
+
 def render_location_picker(
     map_key: str,
     origin_key: str = "iso_origin",
     default=(-33.46803, -70.67045)
 ):
     if origin_key not in st.session_state:
-        st.session_state[origin_key] = {"lat": default[0], "lon": default[1]}
+        st.session_state[origin_key] = {
+            "lat": default[0],
+            "lon": default[1],
+            "address": "Av. Libertador Bernardo O'Higgins, Santiago"
+        }
+
+    st.markdown("**🔍 Buscar dirección (Autocompletado):**")
+    search_col, btn_col = st.columns([3, 1])
+
+    with search_col:
+        search_query = st.text_input(
+            "Dirección",
+            key=f"{map_key}_address_input",
+            placeholder="Ej: Alameda 1050, Santiago",
+            label_visibility="collapsed"
+        )
+
+    with btn_col:
+        search_pressed = st.button("Buscar", key=f"{map_key}_search_btn", icon=":material/search:")
+
+    if (search_pressed or search_query) and search_query.strip():
+        # Autocompletado via Backend Controller
+        results = call_geocode_autocomplete_api(search_query)
+        if results:
+            options_map = {res["display_name"]: res for res in results}
+            selected_display = st.selectbox(
+                "Direcciones encontradas:",
+                options=list(options_map.keys()),
+                key=f"{map_key}_select_address"
+            )
+            if selected_display:
+                selected_item = options_map[selected_display]
+                new_lat = selected_item["lat"]
+                new_lon = selected_item["lon"]
+                if (new_lat != st.session_state[origin_key]["lat"] or
+                    new_lon != st.session_state[origin_key]["lon"]):
+                    st.session_state[origin_key]["lat"] = new_lat
+                    st.session_state[origin_key]["lon"] = new_lon
+                    st.session_state[origin_key]["address"] = selected_item["display_name"]
+        else:
+            if search_pressed:
+                st.warning("No se encontraron resultados para la dirección ingresada.")
+
+    curr_lat = st.session_state[origin_key]["lat"]
+    curr_lon = st.session_state[origin_key]["lon"]
+    curr_addr = st.session_state[origin_key].get("address", "Punto seleccionado")
 
     m = folium.Map(
-        location=[st.session_state[origin_key]["lat"], st.session_state[origin_key]["lon"]],
+        location=[curr_lat, curr_lon],
         zoom_start=14,
         height=300
     )
 
     folium.Marker(
-        [st.session_state[origin_key]["lat"], st.session_state[origin_key]["lon"]],
-        popup="Origen",
+        [curr_lat, curr_lon],
+        popup=curr_addr,
+        tooltip=curr_addr,
         icon=folium.Icon(color="red", icon="info-sign")
     ).add_to(m)
 
     map_data = st_folium(m, width="100%", height=300, key=map_key)
 
     if map_data and map_data.get("last_clicked"):
-        st.session_state[origin_key] = {
-            "lat": map_data["last_clicked"]["lat"],
-            "lon": map_data["last_clicked"]["lng"]
-        }
+        click_lat = map_data["last_clicked"]["lat"]
+        click_lon = map_data["last_clicked"]["lng"]
+
+        # Si cambió el punto al hacer click en el mapa, traducir coordenadas -> dirección
+        if round(click_lat, 5) != round(curr_lat, 5) or round(click_lon, 5) != round(curr_lon, 5):
+            st.session_state[origin_key]["lat"] = click_lat
+            st.session_state[origin_key]["lon"] = click_lon
+
+            rev_result = call_reverse_geocode_api(click_lat, click_lon)
+            if rev_result and rev_result.get("display_name"):
+                st.session_state[origin_key]["address"] = rev_result.get("short_address") or rev_result.get("display_name")
+            else:
+                st.session_state[origin_key]["address"] = f"{click_lat:.5f}, {click_lon:.5f}"
+
+            st.rerun()
+
+    if st.session_state[origin_key].get("address"):
+        st.caption(f"📍 **Ubicación:** {st.session_state[origin_key]['address']}")
 
     lat = st.session_state[origin_key]["lat"]
     lon = st.session_state[origin_key]["lon"]
