@@ -11,8 +11,6 @@ from utils.geojson_utils import (
 )
 
 WALK_DIST_MAX = 800
-WAIT_TIME_MIN = 5
-WALK_TIME_MIN = 10
 
 
 class TransitIsochroneService:
@@ -34,6 +32,16 @@ class TransitIsochroneService:
             max_dist_m=WALK_DIST_MAX
         )
 
+    def _strip_suffix(self, node_id):
+
+        if "__WAIT" in node_id:
+            return node_id.replace("__WAIT", "")
+
+        elif "__DEP" in node_id:
+            return node_id.replace("__DEP", "")
+
+        return node_id
+
     def _compute_reachable_stops(
         self,
         origin_stops,
@@ -41,24 +49,25 @@ class TransitIsochroneService:
         minutes
     ):
 
-        remaining = (
-            minutes
-            - WALK_TIME_MIN
-            - WAIT_TIME_MIN
-        )
-
-        if remaining <= 0:
-            return set()
-
-        cutoff_sec = remaining * 60
+        cutoff_base_sec = minutes * 60
 
         reachable = set()
 
         for origin in origin_stops:
 
             stop_id = origin["stop_id"]
+            walk_sec = origin["walk_time_min"] * 60
 
-            if stop_id not in travel_graph:
+            source_node = f"{stop_id}__WAIT"
+
+            if source_node not in travel_graph:
+
+                reachable.add(stop_id)
+                continue
+
+            remaining = cutoff_base_sec - walk_sec
+
+            if remaining <= 0:
 
                 reachable.add(stop_id)
                 continue
@@ -67,14 +76,15 @@ class TransitIsochroneService:
 
                 lengths = nx.single_source_dijkstra_path_length(
                     travel_graph,
-                    source=stop_id,
-                    cutoff=cutoff_sec,
+                    source=source_node,
+                    cutoff=remaining,
                     weight="time"
                 )
 
-                for s in lengths:
+                for node_id in lengths:
 
-                    reachable.add(s)
+                    clean = self._strip_suffix(node_id)
+                    reachable.add(clean)
 
             except Exception:
 
@@ -88,6 +98,7 @@ class TransitIsochroneService:
         lat=None,
         lon=None,
         minutes=30,
+        departure_hour=None,
         include_centers=False
     ):
 
@@ -96,6 +107,7 @@ class TransitIsochroneService:
         print("comuna:", comuna)
         print("lat:", lat, "lon:", lon)
         print("minutes:", minutes)
+        print("departure_hour:", departure_hour)
         print("===================================")
 
         if comuna is None:
@@ -132,12 +144,14 @@ class TransitIsochroneService:
             )
 
         # =========================
-        # 2. GRAFO TRANSPORTE
+        # 2. GRAFO MULTIMODAL
         # =========================
 
-        print("2. CONSTRUYENDO GRAFO DE VIAJE")
+        print("2. CONSTRUYENDO GRAFO MULTIMODAL")
 
-        travel_graph = self.gtfs_repo.build_travel_graph()
+        travel_graph = self.gtfs_repo.build_multimodal_graph(
+            departure_hour=departure_hour
+        )
 
         print(
             f"   nodos: "
@@ -185,10 +199,14 @@ class TransitIsochroneService:
             stops_df["stop_id"].isin(reachable_ids)
         ]
 
+        valid_stops = reachable_stops[
+            reachable_stops["stop_lat"].notna()
+        ]
+
         coords = list(
             zip(
-                reachable_stops["stop_lon"],
-                reachable_stops["stop_lat"]
+                valid_stops["stop_lon"],
+                valid_stops["stop_lat"]
             )
         )
 
@@ -235,6 +253,7 @@ class TransitIsochroneService:
                     "mode": "transit",
                     "comuna": comuna_slug,
                     "minutes": minutes,
+                    "departure_hour": departure_hour,
                     "reachable_stops": len(reachable_ids),
                     "origin_stops": len(origin_stops)
                 }
@@ -307,6 +326,7 @@ class TransitIsochroneService:
             metadata={
                 "comuna": comuna_slug,
                 "minutes": minutes,
+                "departure_hour": departure_hour,
                 "reachable_stops": len(reachable_ids),
                 "origin_stops": len(origin_stops)
             }

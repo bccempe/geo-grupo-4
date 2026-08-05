@@ -8,4 +8,6 @@ openpyxl
 osmnx
 python-dotenv
 networkx
-requests
+requests
+scipy
+numpy

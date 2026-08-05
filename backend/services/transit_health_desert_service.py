@@ -18,6 +18,16 @@ class TransitHealthDesertService:
         self.gtfs_repo = GTFSRepository()
         self.graph_repo = GraphRepository()
 
+    def _strip_suffix(self, node_id):
+
+        if "__WAIT" in node_id:
+            return node_id.replace("__WAIT", "")
+
+        elif "__DEP" in node_id:
+            return node_id.replace("__DEP", "")
+
+        return node_id
+
     def _build_single_isochrone(
         self,
         travel_graph,
@@ -35,20 +45,25 @@ class TransitHealthDesertService:
         if not origin_stops:
             return None
 
-        remaining = minutes - 5 - 10
-
-        if remaining <= 0:
-            return None
-
-        cutoff_sec = remaining * 60
+        cutoff_base_sec = minutes * 60
 
         reachable = set()
 
         for origin in origin_stops:
 
             stop_id = origin["stop_id"]
+            walk_sec = origin["walk_time_min"] * 60
 
-            if stop_id not in travel_graph:
+            source_node = f"{stop_id}__WAIT"
+
+            if source_node not in travel_graph:
+
+                reachable.add(stop_id)
+                continue
+
+            remaining = cutoff_base_sec - walk_sec
+
+            if remaining <= 0:
 
                 reachable.add(stop_id)
                 continue
@@ -57,13 +72,13 @@ class TransitHealthDesertService:
 
                 lengths = nx.single_source_dijkstra_path_length(
                     travel_graph,
-                    source=stop_id,
-                    cutoff=cutoff_sec,
+                    source=source_node,
+                    cutoff=remaining,
                     weight="time"
                 )
 
-                for s in lengths:
-                    reachable.add(s)
+                for node_id in lengths:
+                    reachable.add(self._strip_suffix(node_id))
 
             except Exception:
 
@@ -78,10 +93,14 @@ class TransitHealthDesertService:
             stops_df["stop_id"].isin(reachable)
         ]
 
+        valid_stops = reachable_stops[
+            reachable_stops["stop_lat"].notna()
+        ]
+
         coords = list(
             zip(
-                reachable_stops["stop_lon"],
-                reachable_stops["stop_lat"]
+                valid_stops["stop_lon"],
+                valid_stops["stop_lat"]
             )
         )
 
@@ -100,7 +119,8 @@ class TransitHealthDesertService:
     def build_health_deserts(
         self,
         comuna,
-        minutes=30
+        minutes=30,
+        departure_hour=None
     ):
 
         comuna_slug = normalize_to_slug(comuna)
@@ -109,6 +129,7 @@ class TransitHealthDesertService:
         print("DESIERTOS DE SALUD - TRANSPORTE PUBLICO")
         print("comuna:", comuna_slug)
         print("minutes:", minutes)
+        print("departure_hour:", departure_hour)
         print("===================================")
 
         # =========================
@@ -130,15 +151,17 @@ class TransitHealthDesertService:
             )
 
         # =========================
-        # 2. GRAFO GTFS
+        # 2. GRAFO MULTIMODAL
         # =========================
 
-        print("2. CONSTRUYENDO GRAFO DE TRANSPORTE")
+        print("2. CONSTRUYENDO GRAFO MULTIMODAL")
 
-        travel_graph = self.gtfs_repo.build_travel_graph()
+        travel_graph = self.gtfs_repo.build_multimodal_graph(
+            departure_hour=departure_hour
+        )
 
         print(
-            f"   nodos: {travel_graph.number_of_nodes()} paradas"
+            f"   nodos: {travel_graph.number_of_nodes()}"
         )
 
         # =========================
@@ -262,6 +285,7 @@ class TransitHealthDesertService:
                     "kind": "coverage",
                     "mode": "transit",
                     "minutes": minutes,
+                    "departure_hour": departure_hour,
                     "comuna": comuna_slug
                 }
             )
@@ -274,6 +298,7 @@ class TransitHealthDesertService:
                     "kind": "health_desert",
                     "mode": "transit",
                     "minutes": minutes,
+                    "departure_hour": departure_hour,
                     "comuna": comuna_slug
                 }
             )
@@ -289,6 +314,7 @@ class TransitHealthDesertService:
             metadata={
                 "comuna": comuna_slug,
                 "minutes": minutes,
+                "departure_hour": departure_hour,
                 "centers_count": len(centers),
                 "generated_isochrones": len(polygons),
                 "coverage_area": coverage.area,

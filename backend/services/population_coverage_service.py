@@ -6,6 +6,7 @@ from shapely.geometry import shape
 from repository.cov_poblacional_repository import CensusRepository
 from repository.gtfs_repository import GTFSRepository
 from services.health_desert_service import HealthDesertService
+from services.transit_health_desert_service import TransitHealthDesertService
 from utils.comuna_util import normalize_to_slug
 from utils.geojson_utils import geometry_to_feature, feature_collection
 
@@ -75,6 +76,7 @@ class PopulationCoverageService:
     def __init__(self):
         self.census_repository = CensusRepository()
         self.health_desert_service = HealthDesertService()
+        self.transit_health_desert_service = TransitHealthDesertService()
 
         self.gtfs_repo = GTFSRepository()
 
@@ -308,6 +310,187 @@ class PopulationCoverageService:
 
         summary.update({
             "scope": "rm",
+            "comunas": comunas,
+            "comunas_count": len(comunas),
+            "failed_comunas": failed_comunas,
+            "failed_count": len(failed_comunas)
+        })
+
+        return feature_collection(
+            features,
+            metadata=summary
+        )
+
+    def _extract_transit_coverage_polygon(
+        self,
+        comuna: str,
+        minutes: float,
+        departure_hour: int | None = None
+    ) -> BaseGeometry:
+
+        result = self.transit_health_desert_service.build_health_deserts(
+            comuna=comuna,
+            minutes=minutes,
+            departure_hour=departure_hour
+        )
+
+        for feature in result["features"]:
+            if feature["properties"].get("kind") == "coverage":
+                geom = shape(feature["geometry"])
+                geom = self._fix_geometry(geom)
+                if geom is None or geom.is_empty:
+                    raise ValueError(
+                        f"Cobertura TP vacía para comuna {comuna}"
+                    )
+                return geom
+
+        raise ValueError(
+            f"No se encontró cobertura TP para comuna {comuna}"
+        )
+
+    def build_transit_population_coverage(
+        self,
+        comuna: str,
+        minutes: float = 30,
+        departure_hour: int | None = None
+    ):
+
+        comuna_slug = normalize_to_slug(comuna)
+
+        centers = self.gtfs_repo.get_centers_by_comuna(comuna_slug)
+
+        if not centers:
+            raise ValueError(
+                f"No se encontraron centros de salud para {comuna_slug}"
+            )
+
+        coverage_polygon = self._extract_transit_coverage_polygon(
+            comuna=comuna_slug,
+            minutes=minutes,
+            departure_hour=departure_hour
+        )
+
+        blocks = self.census_repository.load_blocks_by_comuna(comuna_slug)
+
+        if not blocks:
+            raise ValueError(
+                f"No se encontraron manzanas censales para {comuna_slug}"
+            )
+
+        block_features, summary = self._build_block_features(
+            blocks=blocks,
+            coverage_polygon=coverage_polygon,
+            comuna_slug=comuna_slug
+        )
+
+        features = [
+            geometry_to_feature(
+                coverage_polygon,
+                properties={
+                    "kind": "coverage",
+                    "mode": "transit",
+                    "comuna": comuna_slug,
+                    "minutes": minutes,
+                    "departure_hour": departure_hour
+                }
+            )
+        ]
+        features.extend(block_features)
+
+        return feature_collection(
+            features,
+            center_list=centers,
+            metadata={
+                "scope": "comuna",
+                "mode": "transit",
+                "minutes": minutes,
+                "departure_hour": departure_hour,
+                **summary
+            }
+        )
+
+    def build_transit_population_coverage_rm(
+        self,
+        minutes: float = 30,
+        departure_hour: int | None = None,
+        comunas: list[str] | None = None,
+    ):
+
+        comunas = comunas or RM_COMUNAS
+
+        coverage_polygons = []
+        all_blocks = []
+        failed_comunas = []
+
+        for comuna in comunas:
+
+            comuna_slug = normalize_to_slug(comuna)
+
+            try:
+                coverage_polygon = (
+                    self._extract_transit_coverage_polygon(
+                        comuna=comuna_slug,
+                        minutes=minutes,
+                        departure_hour=departure_hour
+                    )
+                )
+                coverage_polygons.append(coverage_polygon)
+            except Exception:
+                failed_comunas.append(comuna_slug)
+                continue
+
+            try:
+                blocks = (
+                    self.census_repository.load_blocks_by_comuna(
+                        comuna_slug
+                    )
+                )
+                all_blocks.extend(blocks)
+            except Exception:
+                failed_comunas.append(comuna_slug)
+                continue
+
+        if not coverage_polygons:
+            raise ValueError(
+                "No se pudieron generar coberturas TP para la RM"
+            )
+
+        if not all_blocks:
+            raise ValueError(
+                "No se encontraron manzanas censales para la RM"
+            )
+
+        rm_coverage = unary_union(coverage_polygons)
+        rm_coverage = self._fix_geometry(rm_coverage)
+
+        if rm_coverage is None or rm_coverage.is_empty:
+            raise ValueError(
+                "La cobertura TP consolidada de la RM está vacía"
+            )
+
+        block_features, summary = self._build_block_features(
+            blocks=all_blocks,
+            coverage_polygon=rm_coverage,
+            comuna_slug="rm"
+        )
+
+        features = [
+            geometry_to_feature(
+                rm_coverage,
+                properties={
+                    "kind": "coverage",
+                    "mode": "transit",
+                    "scope": "rm",
+                    "minutes": minutes,
+                    "departure_hour": departure_hour
+                }
+            )
+        ]
+        features.extend(block_features)
+
+        summary.update({
+            "scope": "rm",
+            "mode": "transit",
             "comunas": comunas,
             "comunas_count": len(comunas),
             "failed_comunas": failed_comunas,

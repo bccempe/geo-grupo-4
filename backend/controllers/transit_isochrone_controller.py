@@ -16,6 +16,7 @@ def get_transit_isochrone(
     lat: float = Query(...),
     lon: float = Query(...),
     minutes: float = Query(30, ge=5, le=120),
+    departure_hour: int = Query(None, ge=0, le=23),
     include_centers: bool = Query(False)
 ):
     try:
@@ -24,6 +25,7 @@ def get_transit_isochrone(
             lat=lat,
             lon=lon,
             minutes=minutes,
+            departure_hour=departure_hour,
             include_centers=include_centers
         )
         return result
@@ -37,12 +39,14 @@ def get_transit_isochrone(
 @router.get("/health-deserts")
 def get_transit_health_deserts(
     comuna: str = Query(...),
-    minutes: float = Query(30, ge=5, le=120)
+    minutes: float = Query(30, ge=5, le=120),
+    departure_hour: int = Query(None, ge=0, le=23)
 ):
     try:
         result = desert_service.build_health_deserts(
             comuna=comuna,
-            minutes=minutes
+            minutes=minutes,
+            departure_hour=departure_hour
         )
         return result
     except ValueError as exc:

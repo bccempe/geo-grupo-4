@@ -478,6 +478,7 @@ def call_population_coverage_api(
     endpoint: str,
     minutes: int,
     comuna: str | None = None,
+    departure_hour: int | None = None,
     api_url: str = None,
     spinner_text: str = "Calculando cobertura...",
     show_spinner: bool = True,
@@ -488,6 +489,8 @@ def call_population_coverage_api(
     params = {"minutes": minutes}
     if comuna:
         params["comuna"] = comuna
+    if departure_hour is not None:
+        params["departure_hour"] = departure_hour
 
     try:
         if show_spinner:
@@ -513,7 +516,7 @@ def call_population_coverage_api(
         return None
 
 
-def call_population_coverage_rm(comunas: list[str], minutes: int):
+def call_population_coverage_rm(comunas: list[str], minutes: int, mode: str = "walk", departure_hour: int | None = None):
     """
     Calcula la cobertura RM llamando una vez por comuna al endpoint individual.
     Evita timeout del backend.
@@ -521,6 +524,12 @@ def call_population_coverage_rm(comunas: list[str], minutes: int):
     all_features = []
     processed = []
     failed = []
+
+    endpoint = (
+        "/api/v1/population/coverage"
+        if mode == "walk"
+        else "/api/v1/population/transit-coverage"
+    )
 
     total = len(comunas)
     if total == 0:
@@ -535,9 +544,10 @@ def call_population_coverage_rm(comunas: list[str], minutes: int):
 
         try:
             result = call_population_coverage_api(
-                endpoint="/api/v1/population/coverage",
+                endpoint=endpoint,
                 comuna=comuna,
                 minutes=minutes,
+                departure_hour=departure_hour,
                 spinner_text=f"Procesando {comuna}...",
                 show_spinner=False,
             )
@@ -559,7 +569,9 @@ def call_population_coverage_rm(comunas: list[str], minutes: int):
         "features": all_features,
         "metadata": {
             "scope": "rm",
+            "mode": mode,
             "minutes": minutes,
+            "departure_hour": departure_hour,
             "processed_comunas": processed,
             "failed_comunas": failed,
             "processed_count": len(processed),

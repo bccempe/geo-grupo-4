@@ -92,7 +92,7 @@ with iso_tab:
             spinner_text=f"Calculando isócrona usando transporte público durante {isochrone_minutes} minutos..."
         )
 
-    if st.session_state.get("iso_walk_result") and st.session_state.get("iso_transit_result"):
+    if st.session_state.get("iso_walk_result"):
         st.subheader(f"Caminando {isochrone_minutes} minutos")
         process_isochrone_result(
             st.session_state.iso_walk_result,
@@ -101,6 +101,7 @@ with iso_tab:
             map_key="iso_walk_map"
         )
 
+    if st.session_state.get("iso_transit_result"):
         st.subheader(f"Usando transporte público durante {isochrone_minutes} minutos")
         process_isochrone_result(
             st.session_state.iso_transit_result,
@@ -195,12 +196,13 @@ with coverage_tab:
 
     st.subheader("Cobertura poblacional")
 
-    st.info("La cobertura poblacional se refiere al porcentaje de la población que puede acceder a un centro de salud primaria (CESFAM, SAPU) movilizándose en auto durante una determinada cantidad de tiempo.")
+    st.info("La cobertura poblacional se refiere al porcentaje de la población que puede acceder a un centro de salud primaria (CESFAM, SAPU) movilizándose durante una determinada cantidad de tiempo.")
 
-    col_cov_mode, col_cov_minutes = st.columns([1,1])
-    with col_cov_mode:
-        coverage_mode = st.radio(
-            "Modo",
+    col_cov_scope, col_cov_mode = st.columns([1, 1])
+
+    with col_cov_scope:
+        coverage_scope = st.radio(
+            "Alcance",
             [
                 "Por comuna",
                 "Región Metropolitana completa"
@@ -208,19 +210,46 @@ with coverage_tab:
             horizontal=True
         )
 
+    with col_cov_mode:
+        coverage_transport = st.radio(
+            "Modo de transporte",
+            [
+                "Caminata",
+                "Transporte público"
+            ],
+            horizontal=True,
+            key="coverage_transport"
+        )
+
+    col_cov_minutes, col_cov_hour = st.columns([1, 1])
+
     with col_cov_minutes:
         coverage_minutes = st.slider(
             "Minutos",
             5,
             60,
-            15,
+            15 if coverage_transport == "Caminata" else 30,
             key="coverage_minutes"
         )
+
+    with col_cov_hour:
+        if coverage_transport == "Transporte público":
+            departure_hour = st.slider(
+                "Hora de salida",
+                0,
+                23,
+                8,
+                key="coverage_departure_hour"
+            )
+        else:
+            departure_hour = None
+
+    transit_mode = coverage_transport == "Transporte público"
 
     # ==================================================
     # COBERTURA POR COMUNA
     # ==================================================
-    if coverage_mode == "Por comuna":
+    if coverage_scope == "Por comuna":
 
         coverage_comuna = st.selectbox(
             "Comuna",
@@ -232,6 +261,12 @@ with coverage_tab:
             coverage_comuna
         )
 
+        endpoint = (
+            "/api/v1/population/transit-coverage"
+            if transit_mode
+            else "/api/v1/population/coverage"
+        )
+
         if st.button(
             "Calcular cobertura",
             type="primary",
@@ -241,9 +276,10 @@ with coverage_tab:
 
             st.session_state.coverage_result = (
                 call_population_coverage_api(
-                    endpoint="/api/v1/population/coverage",
+                    endpoint=endpoint,
                     comuna=query_comuna,
                     minutes=coverage_minutes,
+                    departure_hour=departure_hour if transit_mode else None,
                     spinner_text=(
                         f"Calculando cobertura poblacional "
                         f"en {coverage_comuna}..."
@@ -299,8 +335,14 @@ with coverage_tab:
             icon=":material/map_search:"
         ):
 
+            mode_label = (
+                "transporte público"
+                if transit_mode
+                else "caminata"
+            )
+
             with st.spinner(
-                "Calculando cobertura de toda la RM..."
+                f"Calculando cobertura RM ({mode_label})..."
             ):
 
                 rm_result = call_population_coverage_rm(
@@ -308,7 +350,9 @@ with coverage_tab:
                         normalize_comuna(c)
                         for c in comunas_disponibles
                     ],
-                    minutes=coverage_minutes
+                    minutes=coverage_minutes,
+                    mode="transit" if transit_mode else "walk",
+                    departure_hour=departure_hour if transit_mode else None
                 )
 
                 if rm_result:
@@ -320,7 +364,7 @@ with coverage_tab:
                             minutes=coverage_minutes
                         )
                     )
-                
+
                 else:
                     st.session_state.rm_result = None
                     st.session_state.stats_rm = None

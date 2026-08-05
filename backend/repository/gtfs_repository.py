@@ -1,9 +1,12 @@
 import os
 import math
 import networkx as nx
+import numpy as np
 import pandas as pd
 
+from collections import defaultdict
 from pathlib import Path
+from scipy.spatial import KDTree
 from sqlalchemy import inspect, text
 
 from app.db.database import engine
@@ -34,6 +37,9 @@ if not Path(GTFS_DIR).exists():
 # ==========================================================
 
 WALK_SPEED_M_S = 1.2
+BUS_SPEED_KMH = 15.0
+TRANSFER_BUFFER_M = 400.0
+STOP_SHAPE_THRESHOLD_M = 50.0
 
 
 HEALTH_TABLE = os.getenv("HEALTH_TABLE", "establecimientos_de_salud_chile_rm_establecimientos_de_492581f8")
@@ -118,8 +124,12 @@ class GTFSRepository:
         self._trips = None
         self._frequencies = None
         self._routes = None
+        self._shapes = None
 
         self._health_cache = None
+        self._shape_data = None
+        self._shape_stops_cache = None
+        self._multimodal_cache = {}
 
     def _get_table_columns(self, table_name: str) -> set[str]:
         inspector = inspect(engine)
@@ -357,6 +367,557 @@ class GTFSRepository:
                         )
 
         self._cache[cache_key] = graph
+
+        return graph
+
+    # ======================================================
+    # SHAPES
+    # ======================================================
+
+    def load_shapes(self):
+
+        if self._shapes is not None:
+            return self._shapes
+
+        df = pd.read_csv(
+            Path(GTFS_DIR) / "shapes.txt"
+        )
+
+        self._shapes = df
+
+        return df
+
+    # ======================================================
+    # SHAPE CUMULATIVE DISTANCES + KDTREE
+    # ======================================================
+
+    def _compute_shape_data(self):
+
+        if self._shape_data is not None:
+            return self._shape_data
+
+        shapes = self.load_shapes()
+
+        shapes = shapes[
+            shapes["shape_pt_lat"].notna()
+            & shapes["shape_pt_lon"].notna()
+        ]
+
+        shape_cumdists = {}
+        all_points = []
+        point_metadata = []
+
+        for shape_id, group in shapes.groupby(
+            "shape_id",
+            sort=False
+        ):
+
+            group = group.sort_values(
+                "shape_pt_sequence"
+            )
+
+            lats = group["shape_pt_lat"].values
+            lons = group["shape_pt_lon"].values
+
+            cumdist = np.zeros(len(group))
+
+            for i in range(1, len(group)):
+
+                d = haversine(
+                    lats[i - 1],
+                    lons[i - 1],
+                    lats[i],
+                    lons[i]
+                )
+
+                cumdist[i] = cumdist[i - 1] + d
+
+            shape_cumdists[shape_id] = cumdist
+
+            for i in range(len(group)):
+
+                all_points.append(
+                    [lons[i], lats[i]]
+                )
+
+                point_metadata.append(
+                    (shape_id, i, cumdist[i])
+                )
+
+        all_points = np.array(all_points)
+        tree = KDTree(all_points)
+
+        self._shape_data = {
+            "tree": tree,
+            "metadata": point_metadata,
+            "cumdists": shape_cumdists,
+        }
+
+        return self._shape_data
+
+    # ======================================================
+    # ASSIGN STOPS TO SHAPES
+    # ======================================================
+
+    def _assign_stops_to_shapes(
+        self,
+        bus_shape_ids
+    ):
+
+        if self._shape_stops_cache is not None:
+            return self._shape_stops_cache
+
+        shape_data = self._compute_shape_data()
+
+        tree = shape_data["tree"]
+        metadata = shape_data["metadata"]
+
+        stops = self.load_stops()
+
+        stops = stops[stops["stop_lat"].notna()].copy()
+        stops = stops.reset_index(drop=True)
+
+        stop_coords = stops[
+            ["stop_lon", "stop_lat"]
+        ].values
+
+        distances, indices = tree.query(stop_coords)
+
+        shape_stops = defaultdict(list)
+
+        threshold_deg = (
+            STOP_SHAPE_THRESHOLD_M / 111000.0
+        )
+
+        for i in range(len(stops)):
+
+            if distances[i] > threshold_deg:
+                continue
+
+            shape_id, _, cumdist = metadata[
+                indices[i]
+            ]
+
+            if shape_id not in bus_shape_ids:
+                continue
+
+            stop_id = stops.iloc[i]["stop_id"]
+            lat = stops.iloc[i]["stop_lat"]
+            lon = stops.iloc[i]["stop_lon"]
+
+            shape_stops[shape_id].append(
+                (stop_id, cumdist, lat, lon)
+            )
+
+        result = {}
+
+        for shape_id, stops_list in shape_stops.items():
+
+            stops_list.sort(key=lambda x: x[1])
+
+            seen = set()
+            unique_stops = []
+
+            for s in stops_list:
+
+                if s[0] not in seen:
+                    seen.add(s[0])
+                    unique_stops.append(s)
+
+            result[shape_id] = unique_stops
+
+        self._shape_stops_cache = result
+
+        return result
+
+    # ======================================================
+    # BUILD MULTIMODAL GRAPH
+    # ======================================================
+
+    def build_multimodal_graph(
+        self,
+        departure_hour=None
+    ):
+
+        cache_key = departure_hour or "default"
+
+        if cache_key in self._multimodal_cache:
+            return self._multimodal_cache[cache_key]
+
+        stops = self.load_stops()
+        stop_times = self.load_stop_times()
+        trips = self.load_trips()
+        routes = self.load_routes()
+        frequencies = self.load_frequencies()
+
+        route_modes = {}
+
+        for _, row in routes.iterrows():
+
+            rt = row["route_type"]
+
+            route_modes[row["route_id"]] = (
+                "metro"
+                if rt in (0, 1)
+                else "bus"
+            )
+
+        metro_route_ids = {
+            k
+            for k, v in route_modes.items()
+            if v == "metro"
+        }
+
+        metro_trip_ids = set(
+            trips[
+                trips["route_id"].isin(
+                    metro_route_ids
+                )
+            ]["trip_id"]
+        )
+
+        bus_route_ids = {
+            k
+            for k, v in route_modes.items()
+            if v == "bus"
+        }
+
+        bus_shape_ids = set(
+            trips[
+                trips["route_id"].isin(
+                    bus_route_ids
+                )
+            ]["shape_id"]
+        )
+
+        graph = nx.DiGraph()
+
+        stop_coords = {}
+        parent_map = {}
+
+        for _, s in stops.iterrows():
+
+            pid = s.get("parent_station")
+
+            if pd.notna(pid):
+                parent_map[s["stop_id"]] = pid
+
+        valid_stops = stops[
+            stops["stop_lat"].notna()
+        ].copy()
+
+        parent_coords = {}
+
+        for _, s in valid_stops.iterrows():
+            parent_coords[s["stop_id"]] = (
+                float(s["stop_lat"]),
+                float(s["stop_lon"]),
+            )
+
+        for _, s in stops.iterrows():
+
+            sid = s["stop_id"]
+
+            if pd.notna(s["stop_lat"]):
+
+                slat = float(s["stop_lat"])
+                slon = float(s["stop_lon"])
+
+            elif sid in parent_map:
+
+                parent_sid = parent_map[sid]
+                pc = parent_coords.get(parent_sid)
+
+                if pc is None:
+                    continue
+
+                slat, slon = pc
+
+            else:
+                continue
+
+            stop_coords[sid] = (slat, slon)
+
+            graph.add_node(
+                f"{sid}__WAIT",
+                lat=slat,
+                lon=slon,
+                stop_id=sid,
+            )
+
+            graph.add_node(
+                f"{sid}__DEP",
+                lat=slat,
+                lon=slon,
+                stop_id=sid,
+            )
+
+        # =============================================
+        # METRO EDGES (REAL TIMES)
+        # =============================================
+
+        valid_st = stop_times[
+            stop_times["arrival_sec"].notna()
+            & stop_times["departure_sec"].notna()
+        ]
+
+        metro_st = valid_st[
+            valid_st["trip_id"].isin(metro_trip_ids)
+        ].sort_values(
+            ["trip_id", "stop_sequence"]
+        )
+
+        for _, group in metro_st.groupby(
+            "trip_id",
+            sort=False
+        ):
+
+            group = group.sort_values(
+                "stop_sequence"
+            )
+
+            sids = group["stop_id"].values
+            arrs = group["arrival_sec"].values
+            deps = group["departure_sec"].values
+
+            for i in range(len(sids) - 1):
+
+                u = sids[i]
+                v = sids[i + 1]
+
+                tt = arrs[i + 1] - deps[i]
+
+                if not (10 < tt < 7200):
+                    continue
+
+                u_key = f"{u}__DEP"
+                v_key = f"{v}__WAIT"
+
+                if graph.has_edge(u_key, v_key):
+
+                    existing = graph[u_key][v_key]["time"]
+
+                    if tt < existing:
+
+                        graph[u_key][v_key]["time"] = tt
+                        graph[u_key][v_key]["count"] += 1
+
+                else:
+
+                    graph.add_edge(
+                        u_key,
+                        v_key,
+                        time=tt,
+                        count=1,
+                        kind="metro",
+                    )
+
+        # =============================================
+        # BUS EDGES (ESTIMATED)
+        # =============================================
+
+        shape_stops_map = (
+            self._assign_stops_to_shapes(
+                bus_shape_ids
+            )
+        )
+
+        bus_speed_ms = BUS_SPEED_KMH / 3.6
+
+        for shape_id, ordered_stops in (
+            shape_stops_map.items()
+        ):
+
+            if len(ordered_stops) < 2:
+                continue
+
+            for i in range(
+                len(ordered_stops) - 1
+            ):
+
+                sid_a = ordered_stops[i][0]
+                sid_b = ordered_stops[i + 1][0]
+
+                cum_a = ordered_stops[i][1]
+                cum_b = ordered_stops[i + 1][1]
+
+                dist = cum_b - cum_a
+
+                if dist <= 0:
+                    continue
+
+                tt = dist / bus_speed_ms
+
+                u_key = f"{sid_a}__DEP"
+                v_key = f"{sid_b}__WAIT"
+
+                if graph.has_edge(u_key, v_key):
+
+                    existing = graph[u_key][v_key]["time"]
+
+                    if tt < existing:
+
+                        graph[u_key][v_key]["time"] = tt
+                        graph[u_key][v_key]["count"] += 1
+                        graph[u_key][v_key]["kind"] = "bus"
+
+                else:
+
+                    graph.add_edge(
+                        u_key,
+                        v_key,
+                        time=tt,
+                        count=1,
+                        kind="bus",
+                    )
+
+        # =============================================
+        # WAIT EDGES (HEADWAY)
+        # =============================================
+
+        stop_headways = defaultdict(list)
+
+        if departure_hour is not None:
+
+            hour_sec = departure_hour * 3600
+
+            shape_to_trips = defaultdict(list)
+            trip_to_shape = dict(
+                zip(
+                    trips["trip_id"],
+                    trips["shape_id"],
+                )
+            )
+
+            for _, frow in frequencies.iterrows():
+
+                tid = frow["trip_id"]
+
+                start = parse_time(
+                    frow["start_time"]
+                )
+
+                end = parse_time(
+                    frow["end_time"]
+                )
+
+                if start is None or end is None:
+                    continue
+
+                if start <= hour_sec <= end:
+
+                    sid = trip_to_shape.get(
+                        tid, ""
+                    )
+
+                    if sid:
+                        shape_to_trips[sid].append(
+                            frow["headway_secs"]
+                        )
+
+            for shape_id, s_list in (
+                shape_stops_map.items()
+            ):
+
+                hw_list = shape_to_trips.get(
+                    shape_id,
+                    []
+                )
+
+                if not hw_list:
+                    continue
+
+                min_hw = min(hw_list)
+
+                for s in s_list:
+
+                    stop_headways[s[0]].append(
+                        min_hw
+                    )
+
+        default_wait = 600.0
+
+        for stop_id in stop_coords:
+
+            hw_list = stop_headways.get(
+                stop_id,
+                [default_wait * 2],
+            )
+
+            wait_time = min(hw_list) / 2.0
+
+            graph.add_edge(
+                f"{stop_id}__WAIT",
+                f"{stop_id}__DEP",
+                time=wait_time,
+                count=1,
+                kind="wait",
+            )
+
+        # =============================================
+        # TRANSFER EDGES (WALK BETWEEN NEARBY STOPS)
+        # =============================================
+
+        transfer_deg = (
+            TRANSFER_BUFFER_M / 111000.0
+        )
+
+        stop_ids_list = list(stop_coords.keys())
+
+        stop_coords_arr = np.array(
+            [
+                (
+                    stop_coords[s][1],
+                    stop_coords[s][0],
+                )
+                for s in stop_ids_list
+            ]
+        )
+
+        stop_tree = KDTree(stop_coords_arr)
+
+        pairs = stop_tree.query_pairs(
+            transfer_deg,
+            output_type="ndarray",
+        )
+
+        for i, j in pairs:
+
+            sa = stop_ids_list[i]
+            sb = stop_ids_list[j]
+
+            if sa == sb:
+                continue
+
+            lat_a, lon_a = stop_coords[sa]
+            lat_b, lon_b = stop_coords[sb]
+
+            d = haversine(
+                lat_a,
+                lon_a,
+                lat_b,
+                lon_b,
+            )
+
+            if d <= TRANSFER_BUFFER_M:
+
+                tt = d / WALK_SPEED_M_S
+
+                graph.add_edge(
+                    f"{sa}__WAIT",
+                    f"{sb}__WAIT",
+                    time=tt,
+                    kind="transfer",
+                )
+
+                graph.add_edge(
+                    f"{sb}__WAIT",
+                    f"{sa}__WAIT",
+                    time=tt,
+                    kind="transfer",
+                )
+
+        self._multimodal_cache[cache_key] = graph
 
         return graph
 
