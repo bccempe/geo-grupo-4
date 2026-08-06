@@ -9,5 +9,6 @@ osmnx
 python-dotenv
 networkx
 requests
-scipy
-numpy
+matplotlib
+matplotlib-scalebar
+mapclassify
