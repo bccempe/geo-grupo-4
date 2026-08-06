@@ -1,12 +1,14 @@
-streamlit
-requests
-pandas
-geopandas
-folium
-streamlit-folium
-matplotlib
-rasterio
-contextily
-mapclassify
-matplotlib-scalebar
-openpyxl
+# =========================================================
+# REACT FRONTEND DEPENDENCIES (package.json)
+# =========================================================
+# react >= 18.2.0
+# react-dom >= 18.2.0
+# leaflet >= 1.9.4
+# react-leaflet >= 4.2.1
+# lucide-react >= 0.359.0
+# axios >= 1.6.8
+# tailwindcss >= 3.4.1
+# vite >= 5.2.0
+#
+# Note: The frontend has been refactored from Streamlit to a 
+# high-performance React (Vite + Nginx) web application.

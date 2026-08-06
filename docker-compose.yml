@@ -42,11 +42,11 @@ services:
       - web
 
   # =========================
-  # FRONTEND
+  # FRONTEND (React + Nginx)
   # =========================
   frontend:
     build: ./frontend
-    container_name: streamlit_app
+    container_name: react_app
     restart: always
     depends_on:
       - backend
@@ -54,8 +54,6 @@ services:
       - .env
     ports:
       - "8501:8501"
-    volumes:
-      - ./frontend:/app
     profiles:
       - web
 
