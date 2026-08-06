@@ -69,4 +69,6 @@ postgres_data/
 *.bak
 *.tmp
 .cache/
-backend/Cargar_datos/datos/
+# Node / React
+node_modules/
+frontend/dist/
