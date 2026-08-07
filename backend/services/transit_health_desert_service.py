@@ -286,7 +286,8 @@ class TransitHealthDesertService:
                     "mode": "transit",
                     "minutes": minutes,
                     "departure_hour": departure_hour,
-                    "comuna": comuna_slug
+                    "comuna": comuna_slug,
+                    "engine": "python_networkx"
                 }
             )
         )
@@ -299,7 +300,8 @@ class TransitHealthDesertService:
                     "mode": "transit",
                     "minutes": minutes,
                     "departure_hour": departure_hour,
-                    "comuna": comuna_slug
+                    "comuna": comuna_slug,
+                    "engine": "python_networkx"
                 }
             )
         )
@@ -315,6 +317,7 @@ class TransitHealthDesertService:
                 "comuna": comuna_slug,
                 "minutes": minutes,
                 "departure_hour": departure_hour,
+                "engine": "python_networkx",
                 "centers_count": len(centers),
                 "generated_isochrones": len(polygons),
                 "coverage_area": coverage.area,

@@ -14,6 +14,8 @@ def export_health_desert(payload: Dict[str, Any] = Body(...)):
     Recibe la respuesta GeoJSON de desiertos de salud y genera una imagen PNG.
     """
     try:
+        import time
+        start_time = time.perf_counter()
         data = payload.get("data", {})
         minutes = int(payload.get("minutes", 30))
         comuna = str(payload.get("comuna", "Comuna"))
@@ -25,6 +27,8 @@ def export_health_desert(payload: Dict[str, Any] = Body(...)):
             comuna=comuna,
             mode=mode
         )
+        elapsed = time.perf_counter() - start_time
+        print(f"[ExportController] EXPORTACIÓN DESIERTO GENERADA EN {elapsed:.4f}s")
         return Response(content=png_bytes, media_type="image/png")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -39,6 +43,8 @@ def export_population_coverage(payload: Dict[str, Any] = Body(...)):
     Recibe la respuesta GeoJSON de cobertura poblacional y genera una imagen PNG.
     """
     try:
+        import time
+        start_time = time.perf_counter()
         data = payload.get("data", {})
         minutes = int(payload.get("minutes", 15))
         comuna = payload.get("comuna", "Región Metropolitana")
@@ -48,6 +54,8 @@ def export_population_coverage(payload: Dict[str, Any] = Body(...)):
             minutes=minutes,
             comuna=comuna
         )
+        elapsed = time.perf_counter() - start_time
+        print(f"[ExportController] EXPORTACIÓN COBERTURA GENERADA EN {elapsed:.4f}s")
         return Response(content=png_bytes, media_type="image/png")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

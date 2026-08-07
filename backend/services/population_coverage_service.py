@@ -5,7 +5,7 @@ from shapely.geometry import shape
 
 from repository.cov_poblacional_repository import CensusRepository
 from repository.gtfs_repository import GTFSRepository
-from services.health_desert_service import HealthDesertService
+from services.georoute_health_desert_service import GeorouteHealthDesertService
 from services.transit_health_desert_service import TransitHealthDesertService
 from services.georoute_client import GeorouteClient
 from utils.comuna_util import normalize_to_slug
@@ -76,7 +76,7 @@ class PopulationCoverageService:
 
     def __init__(self):
         self.census_repository = CensusRepository()
-        self.health_desert_service = HealthDesertService()
+        self.health_desert_service = GeorouteHealthDesertService(profile="foot")
         self.transit_health_desert_service = TransitHealthDesertService()
 
         self.gtfs_repo = GTFSRepository()
@@ -186,7 +186,8 @@ class PopulationCoverageService:
         self,
         blocks: list[dict],
         coverage_polygon: BaseGeometry,
-        comuna_slug: str
+        comuna_slug: str,
+        engine: str | None = None
     ) -> tuple[list[dict], dict]:
         features = []
 
@@ -232,20 +233,25 @@ class PopulationCoverageService:
             elif coverage_ratio > 0:
                 status = "partial"
 
+            properties = {
+                "kind": "census_block",
+                "comuna": comuna_slug,
+                "block_id": block.get("block_id"),
+                "population": population,
+                "elderly_population": elderly_population,
+                "coverage_ratio": round(coverage_ratio, 6),
+                "covered_population": round(block_covered_population, 6),
+                "covered_elderly_population": round(block_covered_elderly, 6),
+                "status": status
+            }
+
+            if engine is not None:
+                properties["engine"] = engine
+
             features.append(
                 geometry_to_feature(
                     geom,
-                    properties={
-                        "kind": "census_block",
-                        "comuna": comuna_slug,
-                        "block_id": block.get("block_id"),
-                        "population": population,
-                        "elderly_population": elderly_population,
-                        "coverage_ratio": round(coverage_ratio, 6),
-                        "covered_population": round(block_covered_population, 6),
-                        "covered_elderly_population": round(block_covered_elderly, 6),
-                        "status": status
-                    }
+                    properties=properties
                 )
             )
 
@@ -298,7 +304,8 @@ class PopulationCoverageService:
         block_features, summary = self._build_block_features(
             blocks=blocks,
             coverage_polygon=coverage_polygon,
-            comuna_slug=comuna_slug
+            comuna_slug=comuna_slug,
+            engine="georoute"
         )
 
         features = [
@@ -307,7 +314,9 @@ class PopulationCoverageService:
                 properties={
                     "kind": "coverage",
                     "comuna": comuna_slug,
-                    "minutes": minutes
+                    "minutes": minutes,
+                    "engine": "georoute",
+                    "profile": "foot"
                 }
             )
         ]
@@ -319,6 +328,8 @@ class PopulationCoverageService:
             metadata={
                 "scope": "comuna",
                 "minutes": minutes,
+                "engine": "georoute",
+                "profile": "foot",
                 **summary
             }
         )
@@ -365,7 +376,8 @@ class PopulationCoverageService:
         block_features, summary = self._build_block_features(
             blocks=all_blocks,
             coverage_polygon=rm_coverage,
-            comuna_slug="rm"
+            comuna_slug="rm",
+            engine="georoute"
         )
 
         features = [
@@ -374,7 +386,9 @@ class PopulationCoverageService:
                 properties={
                     "kind": "coverage",
                     "scope": "rm",
-                    "minutes": minutes
+                    "minutes": minutes,
+                    "engine": "georoute",
+                    "profile": "foot"
                 }
             )
         ]
@@ -382,6 +396,8 @@ class PopulationCoverageService:
 
         summary.update({
             "scope": "rm",
+            "engine": "georoute",
+            "profile": "foot",
             "comunas": comunas,
             "comunas_count": len(comunas),
             "failed_comunas": failed_comunas,
@@ -452,7 +468,8 @@ class PopulationCoverageService:
         block_features, summary = self._build_block_features(
             blocks=blocks,
             coverage_polygon=coverage_polygon,
-            comuna_slug=comuna_slug
+            comuna_slug=comuna_slug,
+            engine="python_networkx"
         )
 
         features = [
@@ -463,7 +480,8 @@ class PopulationCoverageService:
                     "mode": "transit",
                     "comuna": comuna_slug,
                     "minutes": minutes,
-                    "departure_hour": departure_hour
+                    "departure_hour": departure_hour,
+                    "engine": "python_networkx"
                 }
             )
         ]
@@ -477,6 +495,7 @@ class PopulationCoverageService:
                 "mode": "transit",
                 "minutes": minutes,
                 "departure_hour": departure_hour,
+                "engine": "python_networkx",
                 **summary
             }
         )
@@ -543,7 +562,8 @@ class PopulationCoverageService:
         block_features, summary = self._build_block_features(
             blocks=all_blocks,
             coverage_polygon=rm_coverage,
-            comuna_slug="rm"
+            comuna_slug="rm",
+            engine="python_networkx"
         )
 
         features = [
@@ -554,7 +574,8 @@ class PopulationCoverageService:
                     "mode": "transit",
                     "scope": "rm",
                     "minutes": minutes,
-                    "departure_hour": departure_hour
+                    "departure_hour": departure_hour,
+                    "engine": "python_networkx"
                 }
             )
         ]
@@ -563,6 +584,7 @@ class PopulationCoverageService:
         summary.update({
             "scope": "rm",
             "mode": "transit",
+            "engine": "python_networkx",
             "comunas": comunas,
             "comunas_count": len(comunas),
             "failed_comunas": failed_comunas,

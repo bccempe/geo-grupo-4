@@ -47,12 +47,16 @@ def get_population_coverage(
         print("minutes:", minutes)
         print("===================================")
 
+        import time
+        start_time = time.perf_counter()
+
         result = service.build_population_coverage(
             comuna=comuna,
             minutes=minutes
         )
 
-        print("COBERTURA POBLACIONAL CALCULADA")
+        elapsed = time.perf_counter() - start_time
+        print(f"[PopulationCoverageController] COBERTURA POBLACIONAL CALCULADA EN {elapsed:.4f}s")
         return result
 
     except ValueError as exc:
@@ -75,11 +79,15 @@ def get_population_coverage_rm(
         print("minutes:", minutes)
         print("===================================")
 
+        import time
+        start_time = time.perf_counter()
+
         result = service.build_population_coverage_rm(
             minutes=minutes
         )
 
-        print("COBERTURA POBLACIONAL RM CALCULADA")
+        elapsed = time.perf_counter() - start_time
+        print(f"[PopulationCoverageController] COBERTURA POBLACIONAL RM CALCULADA EN {elapsed:.4f}s")
         return result
 
     except ValueError as exc:
@@ -107,13 +115,17 @@ def get_transit_population_coverage(
         print("departure_hour:", departure_hour)
         print("===================================")
 
+        import time
+        start_time = time.perf_counter()
+
         result = service.build_transit_population_coverage(
             comuna=comuna,
             minutes=minutes,
             departure_hour=departure_hour
         )
 
-        print("COBERTURA TP CALCULADA")
+        elapsed = time.perf_counter() - start_time
+        print(f"[PopulationCoverageController] COBERTURA TP CALCULADA EN {elapsed:.4f}s")
         return result
 
     except ValueError as exc:
@@ -138,12 +150,16 @@ def get_transit_population_coverage_rm(
         print("departure_hour:", departure_hour)
         print("===================================")
 
+        import time
+        start_time = time.perf_counter()
+
         result = service.build_transit_population_coverage_rm(
             minutes=minutes,
             departure_hour=departure_hour
         )
 
-        print("COBERTURA TP RM CALCULADA")
+        elapsed = time.perf_counter() - start_time
+        print(f"[PopulationCoverageController] COBERTURA TP RM CALCULADA EN {elapsed:.4f}s")
         return result
 
     except ValueError as exc:

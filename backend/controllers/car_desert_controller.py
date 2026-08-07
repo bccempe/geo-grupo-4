@@ -3,6 +3,7 @@ from shapely.geometry import shape
 from shapely.ops import unary_union
 import traceback
 import json
+import time
 
 from services.car_health_desert_service import CarHealthDesertService
 from utils.geojson_utils import (
@@ -93,7 +94,6 @@ def get_car_health_deserts(
     Calcula zonas cubiertas y desiertos de salud
     para una comuna usando automóvil.
     """
-
     try:
         print("===================================")
         print("CALCULANDO DESIERTOS DE SALUD EN AUTOMOVIL")
@@ -101,12 +101,15 @@ def get_car_health_deserts(
         print("minutes:", minutes)
         print("===================================")
 
+        start_time = time.perf_counter()
+
         result = service.build_health_deserts(
             comuna=comuna,
             minutes=minutes
         )
 
-        print("DESIERTOS CALCULADOS EN AUTOMOVIL")
+        elapsed = time.perf_counter() - start_time
+        print(f"[CarDesertController] DESIERTOS EN AUTO CALCULADOS EN {elapsed:.4f}s")
 
         return result
 
@@ -115,7 +118,6 @@ def get_car_health_deserts(
             status_code=400,
             detail=str(exc)
         )
-
     except Exception as exc:
         traceback.print_exc()
         raise HTTPException(
@@ -134,12 +136,13 @@ def get_rm_health_deserts(
     una única geometría consolidada.
     Además guarda el resultado en un JSON.
     """
-
     try:
         print("===================================")
         print("DESIERTOS DE SALUD RM")
         print("minutes:", minutes)
         print("===================================")
+
+        start_time = time.perf_counter()
 
         coverage_polygons = []
         desert_polygons = []
@@ -184,7 +187,9 @@ def get_rm_health_deserts(
                     "kind": "coverage",
                     "mode": "car",
                     "minutes": minutes,
-                    "scope": "rm"
+                    "scope": "rm",
+                    "engine": "georoute",
+                    "profile": "car"
                 }
             ),
             geometry_to_feature(
@@ -193,7 +198,9 @@ def get_rm_health_deserts(
                     "kind": "health_desert",
                     "mode": "car",
                     "minutes": minutes,
-                    "scope": "rm"
+                    "scope": "rm",
+                    "engine": "georoute",
+                    "profile": "car"
                 }
             )
         ]
@@ -203,6 +210,8 @@ def get_rm_health_deserts(
             metadata={
                 "scope": "rm",
                 "minutes": minutes,
+                "engine": "georoute",
+                "profile": "car",
                 "comunas": RM_COMUNAS,
                 "comunas_count": len(RM_COMUNAS),
                 "failed_comunas": failed_comunas,
@@ -220,7 +229,8 @@ def get_rm_health_deserts(
                 indent=2
             )
 
-        print(f"[INFO] Archivo guardado: {output_file}")
+        elapsed = time.perf_counter() - start_time
+        print(f"[CarDesertController] DESIERTOS RM EN AUTO CALCULADOS EN {elapsed:.4f}s (Archivo: {output_file})")
 
         return result
 

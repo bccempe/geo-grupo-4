@@ -80,7 +80,7 @@ def feature_collection(features, center_list=None, metadata=None):
 
         for center in center_list:
 
-            lon = center.get("lng")
+            lon = center.get("lng", center.get("lon"))
             lat = center.get("lat")
 
             if lon is None or lat is None:

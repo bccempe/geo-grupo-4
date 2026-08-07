@@ -50,6 +50,7 @@ class GeorouteHealthDesertService:
             raise ValueError("La cobertura georoute quedó vacía dentro de la comuna")
 
         desert = boundary.difference(coverage)
+        desert_pct = (desert.area / boundary.area * 100) if boundary.area > 0 else 0
         features = [
             geometry_to_feature(coverage, {
                 "kind": "coverage", "mode": self.profile, "comuna": comuna_slug,
@@ -58,6 +59,7 @@ class GeorouteHealthDesertService:
             geometry_to_feature(desert, {
                 "kind": "health_desert", "mode": self.profile, "comuna": comuna_slug,
                 "minutes": minutes, "engine": "georoute",
+                "desert_percentage": desert_pct,
             }),
         ]
         return feature_collection(features, metadata={
@@ -66,6 +68,8 @@ class GeorouteHealthDesertService:
             "engine": "georoute",
             "profile": self.profile,
             "centers_count": len(centers),
+            "generated_isochrones": len(polygons),
+            "desert_pct": desert_pct,
             "failed_centers": failed_centers,
         })
 

@@ -29,12 +29,16 @@ def get_health_deserts(
         print("minutes:", minutes)
         print("===================================")
 
+        import time
+        start_time = time.perf_counter()
+
         result = service.build_health_deserts(
             comuna=comuna,
             minutes=minutes
         )
 
-        print("DESIERTOS CALCULADOS")
+        elapsed = time.perf_counter() - start_time
+        print(f"[HealthDesertController] DESIERTOS CALCULADOS EN {elapsed:.4f}s")
 
         return result
 

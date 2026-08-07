@@ -33,6 +33,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_timing_middleware(request, call_next):
+    import time
+    start_time = time.perf_counter()
+    response = await call_next(request)
+    process_time = time.perf_counter() - start_time
+    print(f"[CONTROLADOR] {request.method} {request.url.path} ejecutado en {process_time:.4f} segundos (Status: {response.status_code})")
+    return response
+
 app.include_router(isochrone_router)
 app.include_router(health_desert_router)
 app.include_router(transit_isochrone_router)

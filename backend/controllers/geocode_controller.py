@@ -18,7 +18,11 @@ def search_address(
     Busca direcciones para el autocompletado y traducción a coordenadas.
     """
     try:
+        import time
+        start_time = time.perf_counter()
         results = service.search_address(query=q, limit=limit)
+        elapsed = time.perf_counter() - start_time
+        print(f"[GeocodeController] AUTOCOMPLETE ENCONTRÓ {len(results)} RESULTADOS EN {elapsed:.4f}s")
         return {"query": q, "results": results}
     except Exception as exc:
         traceback.print_exc()
@@ -37,7 +41,11 @@ def reverse_geocode(
     Traduce coordenadas (lat, lon) a una dirección formateada.
     """
     try:
+        import time
+        start_time = time.perf_counter()
         result = service.reverse_geocode(lat=lat, lon=lon)
+        elapsed = time.perf_counter() - start_time
+        print(f"[GeocodeController] REVERSE GEOCODE PROCESADO EN {elapsed:.4f}s")
         if not result:
             return {"lat": lat, "lon": lon, "display_name": f"{lat:.5f}, {lon:.5f}", "short_address": f"{lat:.5f}, {lon:.5f}"}
         return result
