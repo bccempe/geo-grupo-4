@@ -12,6 +12,26 @@ router = APIRouter(
 service = PopulationCoverageService()
 
 
+@router.get("/accessibility")
+def get_population_accessibility(
+    comuna: str = Query(...),
+    minutes: float = Query(15, ge=1, le=180),
+    decay: str = Query("step", pattern="^(step|gaussian|linear)$"),
+):
+    """Entrega accesibilidad 2SFCA por manzana usando georoute."""
+    try:
+        return service.build_population_accessibility(
+            comuna=comuna,
+            minutes=minutes,
+            decay=decay,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.get("/coverage")
 def get_population_coverage(
     comuna: str = Query(...),

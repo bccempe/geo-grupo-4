@@ -1,0 +1,22 @@
+FROM rust:1.88-slim AS builder
+
+ARG GEOROUTE_REF=master
+RUN apt-get update && apt-get install -y --no-install-recommends git pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && git clone --depth 1 --branch "${GEOROUTE_REF}" https://github.com/franciscoparrao/georoute.git /src/georoute
+WORKDIR /src/georoute
+# Impide publicar una imagen si las pruebas y los binarios del motor fallan.
+# El upstream omite data/sample.osm.pbf, que su única prueba de integración
+# intenta abrir; se excluye solo esa prueba con un fixture ausente del repositorio.
+RUN cargo test --workspace --locked -- --skip osm::tests::build_stats_reports_giant_component_discards \
+    && cargo build --release --locked -p georoute-server -p georoute-cli \
+    && ./target/release/georoute --help >/dev/null \
+    && ./target/release/georoute-server --help >/dev/null
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl osmium-tool \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --create-home georoute
+COPY --from=builder /src/georoute/target/release/georoute /usr/local/bin/georoute
+COPY --from=builder /src/georoute/target/release/georoute-server /usr/local/bin/georoute-server
+WORKDIR /graphs

@@ -70,3 +70,7 @@ postgres_data/
 *.tmp
 .cache/
 backend/Cargar_datos/datos/
+# Grafos binarios generados por georoute
+backend/data/georoute/*.grt
+backend/data/georoute/*.chg
+backend/data/georoute/*.pbf

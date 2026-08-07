@@ -1,0 +1,29 @@
+diff --git a/backend/services/isochrone_service.py b/backend/services/isochrone_service.py
+index REVIEW..GEOROUTE 100644
+--- a/backend/services/isochrone_service.py
++++ b/backend/services/isochrone_service.py
+@@
++from services.georoute_client import GeorouteClient
+@@
+     def __init__(self):
+         self.graph_repository = GraphRepository()
+         self.health_repository = HealthRepository()
++        self.georoute_client = GeorouteClient(profile="foot")
+@@
+     def build_isochrone(
+@@
+         comuna_slug = normalize_to_slug(comuna)
++        georoute_result = self.georoute_client.isochrone(lon, lat, minutes)
++        polygons = [
++            shape(feature["geometry"])
++            for feature in georoute_result["features"]
++            if feature.get("geometry")
++        ]
++        if not polygons:
++            raise ValueError("georoute no devolvió una isócrona")
++        polygon = unary_union(polygons)
++        boundary = self.graph_repository.load_boundary_polygon(comuna_slug)
++        polygon = polygon.intersection(boundary)
++        # Conservar desde aquí la construcción actual de features: origin,
++        # centros alcanzables y FeatureCollection de salida.
++        # Eliminar la carga del grafo, _find_nearest_node y Dijkstra.

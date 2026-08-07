@@ -7,6 +7,7 @@ from repository.cov_poblacional_repository import CensusRepository
 from repository.gtfs_repository import GTFSRepository
 from services.health_desert_service import HealthDesertService
 from services.transit_health_desert_service import TransitHealthDesertService
+from services.georoute_client import GeorouteClient
 from utils.comuna_util import normalize_to_slug
 from utils.geojson_utils import geometry_to_feature, feature_collection
 
@@ -79,6 +80,77 @@ class PopulationCoverageService:
         self.transit_health_desert_service = TransitHealthDesertService()
 
         self.gtfs_repo = GTFSRepository()
+        self.georoute_client = GeorouteClient(profile="foot")
+
+    def build_population_accessibility(
+        self,
+        comuna: str,
+        minutes: float = 15,
+        decay: str = "step",
+    ):
+        """Calcula 2SFCA por manzana censal mediante georoute.
+
+        La geometría y los datos censales siguen viniendo de PostGIS. El motor
+        solo resuelve los tiempos de viaje y el puntaje de accesibilidad.
+        """
+        comuna_slug = normalize_to_slug(comuna)
+        blocks = self.census_repository.load_blocks_by_comuna(comuna_slug)
+        centers = self.gtfs_repo.get_centers_by_comuna(comuna_slug)
+        if not blocks:
+            raise ValueError(f"No se encontraron manzanas censales para {comuna_slug}")
+        if not centers:
+            raise ValueError(f"No se encontraron centros de salud para {comuna_slug}")
+
+        demand = []
+        valid_blocks = []
+        for block in blocks:
+            geometry = block.get("geometry")
+            population = float(block.get("population", 0) or 0)
+            if geometry is None or geometry.is_empty or population <= 0:
+                continue
+            point = geometry.representative_point()
+            demand.append([float(point.x), float(point.y), population])
+            valid_blocks.append(block)
+
+        supply = []
+        for center in centers:
+            lon = center.get("lng", center.get("lon"))
+            lat = center.get("lat")
+            if lon is not None and lat is not None:
+                # La fuente no expone capacidad; se declara una unidad de oferta.
+                supply.append([float(lon), float(lat), 1.0])
+        if not demand or not supply:
+            raise ValueError("No hay puntos válidos de demanda u oferta para georoute")
+
+        scores = self.georoute_client.access(demand, supply, minutes, decay)
+        if len(scores) != len(valid_blocks):
+            raise ValueError("georoute devolvió un número inesperado de puntajes")
+
+        features = []
+        values = []
+        for block, score in zip(valid_blocks, scores):
+            value = float(score["access"])
+            values.append(value)
+            features.append(geometry_to_feature(block["geometry"], properties={
+                "kind": "census_block_accessibility",
+                "comuna": comuna_slug,
+                "block_id": block.get("block_id"),
+                "population": float(block.get("population", 0) or 0),
+                "accessibility_2sfca": value,
+                "status": "health_desert" if value == 0 else "served",
+                "engine": "georoute",
+            }))
+
+        return feature_collection(features, center_list=centers, metadata={
+            "scope": "comuna",
+            "comuna": comuna_slug,
+            "minutes": minutes,
+            "decay": decay,
+            "engine": "georoute",
+            "method": "2SFCA",
+            "block_count": len(valid_blocks),
+            "health_desert_block_count": sum(value == 0 for value in values),
+        })
 
     def _fix_geometry(self, geom: BaseGeometry | None) -> BaseGeometry | None:
         if geom is None:
