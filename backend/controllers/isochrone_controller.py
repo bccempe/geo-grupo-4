@@ -17,7 +17,7 @@ def get_isochrone(
     lon: float = Query(None),
     address: str = Query(None),
     minutes: float = Query(15, ge=1, le=180),
-    include_centers: bool = Query(False)
+    include_centers: bool = Query(True)
 ):
     try:
         # Si se proporciona una dirección pero no coordenadas, traducir dirección a coordenadas
@@ -41,6 +41,9 @@ def get_isochrone(
         print("minutes:", minutes)
         print("===================================")
 
+        import time
+        start_time = time.perf_counter()
+
         result = service.build_isochrone(
             comuna=comuna,
             lat=lat,
@@ -49,7 +52,8 @@ def get_isochrone(
             include_centers=include_centers
         )
 
-        print("ISOCRONA GENERADA CORRECTAMENTE")
+        elapsed = time.perf_counter() - start_time
+        print(f"[IsochroneController] ISOCRONA GENERADA EN {elapsed:.4f}s")
 
         return result
 

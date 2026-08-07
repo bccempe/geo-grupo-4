@@ -5,6 +5,7 @@ from shapely.ops import unary_union
 from repository.gtfs_repository import GTFSRepository
 from repository.graph_repository import GraphRepository
 from repository.health_repository import HealthRepository
+from services.georoute_health_desert_service import GeorouteHealthDesertService
 
 from utils.comuna_util import normalize_to_slug
 from utils.geojson_utils import (
@@ -21,6 +22,7 @@ class HealthDesertService:
         self.graph_repository = GraphRepository()
         self.health_repository = HealthRepository()
         self.gtfs_repo = GTFSRepository()
+        self.georoute_service = GeorouteHealthDesertService(profile="foot")
 
     def _validate_graph(self, graph):
 
@@ -140,6 +142,17 @@ class HealthDesertService:
         return polygon
 
     def build_health_deserts(
+        self,
+        comuna: str,
+        minutes: float = 15
+    ):
+        """Calcula cobertura peatonal con el perfil foot de georoute."""
+        return self.georoute_service.build_health_deserts(
+            comuna=comuna,
+            minutes=minutes,
+        )
+
+    def build_health_deserts_legacy(
         self,
         comuna: str,
         minutes: float = 15

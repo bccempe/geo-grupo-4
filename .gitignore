@@ -72,3 +72,7 @@ postgres_data/
 # Node / React
 node_modules/
 frontend/dist/
+# Grafos binarios generados por georoute
+backend/data/georoute/*.grt
+backend/data/georoute/*.chg
+backend/data/georoute/*.pbf

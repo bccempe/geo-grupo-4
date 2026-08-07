@@ -255,7 +255,8 @@ class TransitIsochroneService:
                     "minutes": minutes,
                     "departure_hour": departure_hour,
                     "reachable_stops": len(reachable_ids),
-                    "origin_stops": len(origin_stops)
+                    "origin_stops": len(origin_stops),
+                    "engine": "python_networkx"
                 }
             )
         )
@@ -267,7 +268,8 @@ class TransitIsochroneService:
                 properties={
                     "kind": "origin",
                     "comuna": comuna_slug,
-                    "mode": "transit"
+                    "mode": "transit",
+                    "engine": "python_networkx"
                 }
             )
         )
@@ -307,7 +309,8 @@ class TransitIsochroneService:
                                     "nombre",
                                     "Centro de Salud"
                                 ),
-                                "comuna": comuna_slug
+                                "comuna": comuna_slug,
+                                "engine": "python_networkx"
                             }
                         )
                     )
@@ -328,6 +331,7 @@ class TransitIsochroneService:
                 "minutes": minutes,
                 "departure_hour": departure_hour,
                 "reachable_stops": len(reachable_ids),
-                "origin_stops": len(origin_stops)
+                "origin_stops": len(origin_stops),
+                "engine": "python_networkx"
             }
         )

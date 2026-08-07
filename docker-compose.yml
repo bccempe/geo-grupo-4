@@ -32,12 +32,76 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      georoute-foot:
+        condition: service_healthy
+      georoute-car:
+        condition: service_healthy
     env_file:
       - .env
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+    profiles:
+      - web
+
+  # =========================
+  # ROUTING: GEOROUTE (RUST)
+  # =========================
+  georoute-foot:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.georoute
+    container_name: georoute_foot
+    restart: always
+    depends_on:
+      georoute-graph-builder:
+        condition: service_completed_successfully
+    volumes:
+      - ./backend/data/georoute:/graphs:ro
+    command: ["georoute-server", "/graphs/rm-foot.grt", "--ch", "/graphs/rm-foot.chg", "--bind", "0.0.0.0:8090"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:8090/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    profiles:
+      - web
+
+  georoute-car:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.georoute
+    container_name: georoute_car
+    restart: always
+    depends_on:
+      georoute-graph-builder:
+        condition: service_completed_successfully
+    volumes:
+      - ./backend/data/georoute:/graphs:ro
+    command: ["georoute-server", "/graphs/rm-car.grt", "--ch", "/graphs/rm-car.chg", "--bind", "0.0.0.0:8090"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:8090/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    profiles:
+      - web
+
+  georoute-graph-builder:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.georoute
+    container_name: georoute_graph_builder
+    volumes:
+      - ./backend/data:/data
+      - ./backend/scripts/build_georoute_graphs.sh:/usr/local/bin/build_georoute_graphs.sh:ro
+    environment:
+      GEOROUTE_PBF_URL: https://download.geofabrik.de/south-america/chile-latest.osm.pbf
+      GEOROUTE_RM_BBOX: -71.60,-34.90,-69.60,-32.80
+    entrypoint: ["/bin/sh", "/usr/local/bin/build_georoute_graphs.sh"]
     profiles:
       - web
 

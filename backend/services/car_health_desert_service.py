@@ -6,6 +6,7 @@ from shapely.ops import unary_union
 
 from repository.graph_repository import GraphRepository
 from repository.health_repository import HealthRepository
+from services.georoute_health_desert_service import GeorouteHealthDesertService
 from utils.comuna_util import normalize_to_slug
 from utils.geojson_utils import (
     build_isochrone_polygon_from_graph,
@@ -30,6 +31,7 @@ class CarHealthDesertService:
     def __init__(self):
         self.graph_repository = GraphRepository()
         self.health_repository = HealthRepository()
+        self.georoute_service = GeorouteHealthDesertService(profile="car")
 
     def _stable_seed(self, *parts) -> int:
         payload = "|".join(str(p) for p in parts)
@@ -236,6 +238,17 @@ class CarHealthDesertService:
         return polygon
 
     def build_health_deserts(
+        self,
+        comuna: str,
+        minutes: float = 15
+    ):
+        """Calcula cobertura vehicular con el perfil car de georoute."""
+        return self.georoute_service.build_health_deserts(
+            comuna=comuna,
+            minutes=minutes,
+        )
+
+    def build_health_deserts_legacy(
         self,
         comuna: str,
         minutes: float = 15

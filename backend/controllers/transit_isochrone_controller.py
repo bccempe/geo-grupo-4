@@ -20,6 +20,8 @@ def get_transit_isochrone(
     include_centers: bool = Query(False)
 ):
     try:
+        import time
+        start_time = time.perf_counter()
         result = isochrone_service.build_isochrone(
             comuna=comuna,
             lat=lat,
@@ -28,6 +30,8 @@ def get_transit_isochrone(
             departure_hour=departure_hour,
             include_centers=include_centers
         )
+        elapsed = time.perf_counter() - start_time
+        print(f"[TransitIsochroneController] ISOCRONA TP GENERADA EN {elapsed:.4f}s")
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -43,11 +47,15 @@ def get_transit_health_deserts(
     departure_hour: int = Query(None, ge=0, le=23)
 ):
     try:
+        import time
+        start_time = time.perf_counter()
         result = desert_service.build_health_deserts(
             comuna=comuna,
             minutes=minutes,
             departure_hour=departure_hour
         )
+        elapsed = time.perf_counter() - start_time
+        print(f"[TransitIsochroneController] DESIERTO TP CALCULADO EN {elapsed:.4f}s")
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
