@@ -14,3 +14,4 @@ numpy
 matplotlib
 matplotlib-scalebar
 mapclassify
+pytest
