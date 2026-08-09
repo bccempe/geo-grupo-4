@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import MapView from '../components/MapView';
 import StatCard from '../components/StatCard';
 import { comunasDisponibles, fetchLocationOptimization } from '../api/apiService';
-import { MapPinPlus, Loader2, Hospital, Users, HeartHandshake, Target } from 'lucide-react';
+import { MapPin, Loader2, Hospital, Users, HeartHandshake, Target } from 'lucide-react';
 
 export default function LocationTab() {
   const [comuna, setComuna] = useState('Santiago');
@@ -135,7 +135,7 @@ export default function LocationTab() {
             </>
           ) : (
             <>
-              <MapPinPlus className="w-4 h-4" />
+              <MapPin className="w-4 h-4" />
               <span>Optimizar Ubicaciones</span>
             </>
           )}
@@ -168,7 +168,7 @@ export default function LocationTab() {
               <StatCard
                 title="Propuestas"
                 value={meta.proposals_count ?? 0}
-                icon={MapPinPlus}
+                icon={MapPin}
                 color="amber"
               />
               <StatCard
