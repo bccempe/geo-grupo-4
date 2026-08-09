@@ -107,6 +107,7 @@ class LocationOptimizationService:
     ) -> dict | None:
         best = None
         best_score = -1.0
+        best_poly = None
 
         for candidate in candidates:
             try:
@@ -122,22 +123,14 @@ class LocationOptimizationService:
             if coverage_poly is None:
                 continue
 
-            total_pop = 0.0
-            total_eld = 0.0
-            for block in uncovered_blocks:
-                geom = block["geometry"]
-                if not coverage_poly.intersects(geom):
-                    continue
-                overlap = coverage_poly.intersection(geom)
-                if overlap is None or overlap.is_empty:
-                    continue
-                ratio = min(1.0, float(overlap.area) / float(geom.area))
-                total_pop += block["population"] * ratio
-                total_eld += block["elderly_population"] * ratio
+            total_pop, total_eld = self._eval_coverage(
+                coverage_poly, uncovered_blocks
+            )
 
             score = total_eld if prioritize_elderly else total_pop
             if score > best_score:
                 best_score = score
+                best_poly = coverage_poly
                 best = {
                     "lon": candidate["lon"],
                     "lat": candidate["lat"],
@@ -149,41 +142,40 @@ class LocationOptimizationService:
             return None
 
         remaining = []
-        removed_pop = 0.0
-
         for block in uncovered_blocks:
             geom = block["geometry"]
-            if best["lon"] is not None:
-                coverage_poly = None
-                try:
-                    result = georoute.isochrone(lon=best["lon"], lat=best["lat"], minutes=minutes)
-                    coverage_poly = self._polygon_from_isochrone(result)
-                except Exception:
-                    pass
+            if best_poly is not None and best_poly.intersects(geom):
+                overlap = best_poly.intersection(geom)
+                if overlap is not None and not overlap.is_empty:
+                    ratio = min(1.0, float(overlap.area) / float(geom.area))
+                    remaining_pop = block["population"] * (1.0 - ratio)
+                    remaining_eld = block["elderly_population"] * (1.0 - ratio)
+                    if remaining_pop <= 0 and remaining_eld <= 0:
+                        continue
+                    block = dict(block)
+                    block["population"] = remaining_pop
+                    block["elderly_population"] = remaining_eld
+            remaining.append(block)
 
-                if coverage_poly is not None and coverage_poly.intersects(geom):
-                    overlap = coverage_poly.intersection(geom)
-                    if overlap is not None and not overlap.is_empty:
-                        ratio = min(1.0, float(overlap.area) / float(geom.area))
-                        remaining_pop = block["population"] * (1.0 - ratio)
-                        remaining_eld = block["elderly_population"] * (1.0 - ratio)
-
-                        if remaining_pop <= 0 and remaining_eld <= 0:
-                            removed_pop += block["population"]
-                            continue
-
-                        block = dict(block)
-                        block["population"] = remaining_pop
-                        block["elderly_population"] = remaining_eld
-
-                remaining.append(block)
-            else:
-                remaining.append(block)
-
-        best["coverage_polygon"] = coverage_poly if "coverage_polygon" in dir() else None
+        best["coverage_polygon"] = best_poly
         best["remaining_blocks"] = remaining
 
         return best
+
+    def _eval_coverage(self, poly, blocks):
+        total_pop = 0.0
+        total_eld = 0.0
+        for block in blocks:
+            geom = block["geometry"]
+            if not poly.intersects(geom):
+                continue
+            overlap = poly.intersection(geom)
+            if overlap is None or overlap.is_empty:
+                continue
+            ratio = min(1.0, float(overlap.area) / float(geom.area))
+            total_pop += block["population"] * ratio
+            total_eld += block["elderly_population"] * ratio
+        return total_pop, total_eld
 
     def _polygon_from_isochrone(self, georoute_result: dict):
         if not isinstance(georoute_result, dict):

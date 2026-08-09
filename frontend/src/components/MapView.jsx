@@ -20,8 +20,8 @@ const redOriginIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-const goldProposedIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+const blueProposedIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -192,7 +192,7 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
           const covPop = Math.round(center.properties?.covered_population || 0);
           const covEld = Math.round(center.properties?.covered_elderly || 0);
           return (
-            <Marker key={`proposed-${idx}`} position={[coords[1], coords[0]]} icon={goldProposedIcon}>
+            <Marker key={`proposed-${idx}`} position={[coords[1], coords[0]]} icon={blueProposedIcon}>
               <Popup>
                 <div className="text-xs font-sans text-slate-800">
                   <b>Centro propuesto #{rank}</b><br/>
