@@ -20,6 +20,15 @@ const redOriginIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
+const goldProposedIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
 export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 }) {
   if (!geoJsonData || !geoJsonData.features || geoJsonData.features.length === 0) {
     return (
@@ -34,7 +43,10 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
 
   // Extract points (origin & health centers)
   const healthCenters = features.filter(
-    (f) => f.properties?.kind === 'health_center' || f.geometry?.type === 'Point' && f.properties?.kind !== 'origin'
+    (f) => f.properties?.kind === 'health_center' || (f.geometry?.type === 'Point' && f.properties?.kind !== 'origin' && f.properties?.kind !== 'proposed_center')
+  );
+  const proposedCenters = features.filter(
+    (f) => f.properties?.kind === 'proposed_center'
   );
   const originFeature = features.find((f) => f.properties?.kind === 'origin');
 
@@ -69,6 +81,15 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
         color: '#e11d48',
         weight: 1.5,
         fillOpacity: 0.45,
+      };
+    }
+    if (kind === 'proposed_coverage') {
+      return {
+        fillColor: '#f59e0b',
+        color: '#d97706',
+        weight: 2,
+        fillOpacity: 0.3,
+        dashArray: '5 5',
       };
     }
     if (kind === 'census_block') {
@@ -113,6 +134,9 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
       layer.bindTooltip('Desierto de salud');
     } else if (props.kind === 'isochrone') {
       layer.bindTooltip(`Isócrona (${minutes} min)`);
+    } else if (props.kind === 'proposed_coverage') {
+      const rank = props.rank || '';
+      layer.bindTooltip(`Cobertura propuesta #${rank}`);
     }
   };
 
@@ -154,6 +178,26 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
               <Popup>
                 <div className="text-xs font-semibold text-slate-800 font-['Inter']">
                   🏥 {name}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* Proposed Center Markers */}
+        {proposedCenters.map((center, idx) => {
+          const coords = center.geometry?.coordinates;
+          if (!coords || coords.length < 2) return null;
+          const rank = center.properties?.rank || idx + 1;
+          const covPop = Math.round(center.properties?.covered_population || 0);
+          const covEld = Math.round(center.properties?.covered_elderly || 0);
+          return (
+            <Marker key={`proposed-${idx}`} position={[coords[1], coords[0]]} icon={goldProposedIcon}>
+              <Popup>
+                <div className="text-xs font-sans text-slate-800">
+                  <b>Centro propuesto #{rank}</b><br/>
+                  Pob. cubierta: {covPop.toLocaleString()}<br/>
+                  AM cubiertos: {covEld.toLocaleString()}
                 </div>
               </Popup>
             </Marker>
@@ -213,6 +257,22 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
             <div className="flex items-center gap-2">
               <span className="w-3.5 h-3.5 rounded bg-blue-200 border border-blue-300"></span>
               <span>Muy baja (0-25%)</span>
+            </div>
+          </>
+        )}
+        {type === 'location' && (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded bg-amber-500/30 border border-amber-600 border-dashed"></span>
+              <span>Cobertura propuesta</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-amber-400 font-bold">★</span>
+              <span>Centro propuesto</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-emerald-500 font-bold">🏥</span>
+              <span>Centro existente</span>
             </div>
           </>
         )}

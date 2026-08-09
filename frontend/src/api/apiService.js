@@ -100,3 +100,14 @@ export const exportPopulationCoveragePNG = async (data, minutes, comuna) => {
   link.click();
   link.remove();
 };
+
+export const fetchLocationOptimization = async (comuna, minutes, maxCenters, prioritizeElderly) => {
+  const params = {
+    comuna: normalizeComuna(comuna),
+    minutes,
+    max_centers: maxCenters,
+    prioritize_elderly: prioritizeElderly,
+  };
+  const res = await api.get('/api/v1/location/optimize', { params });
+  return res.data;
+};

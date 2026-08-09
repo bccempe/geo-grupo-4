@@ -3,6 +3,7 @@ import Navbar from './components/Navbar';
 import IsochroneTab from './tabs/IsochroneTab';
 import HealthDesertTab from './tabs/HealthDesertTab';
 import CoverageTab from './tabs/CoverageTab';
+import LocationTab from './tabs/LocationTab';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('isochrone');
@@ -17,6 +18,7 @@ export default function App() {
         {activeTab === 'isochrone' && <IsochroneTab />}
         {activeTab === 'desert' && <HealthDesertTab />}
         {activeTab === 'coverage' && <CoverageTab />}
+        {activeTab === 'location' && <LocationTab />}
       </main>
 
       {/* Footer */}

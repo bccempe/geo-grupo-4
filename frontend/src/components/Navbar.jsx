@@ -1,11 +1,12 @@
 import React from 'react';
-import { Activity, MapPin, ShieldAlert, Users } from 'lucide-react';
+import { Activity, MapPin, ShieldAlert, Users, Target } from 'lucide-react';
 
 export default function Navbar({ activeTab, setActiveTab }) {
   const tabs = [
     { id: 'isochrone', label: 'Isócronas', icon: MapPin },
     { id: 'desert', label: 'Desiertos de Salud', icon: ShieldAlert },
     { id: 'coverage', label: 'Cobertura Poblacional', icon: Users },
+    { id: 'location', label: 'Ubicaciones Óptimas', icon: Target },
   ];
 
   return (
