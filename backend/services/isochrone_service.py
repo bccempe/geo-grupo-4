@@ -2,6 +2,7 @@ from shapely.geometry import Point, shape
 from shapely.ops import unary_union
 
 from repository.graph_repository import GraphRepository
+from repository.gtfs_repository import GTFSRepository
 from repository.health_repository import HealthRepository
 from services.georoute_client import GeorouteClient
 
@@ -24,6 +25,7 @@ class IsochroneService:
     def __init__(self):
 
         self.graph_repository = GraphRepository()
+        self.gtfs_repo = GTFSRepository()
         self.health_repository = HealthRepository()
         self.georoute_client = GeorouteClient(profile="foot")
 
