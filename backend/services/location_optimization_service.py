@@ -205,8 +205,8 @@ class LocationOptimizationService:
         for i, proposal in enumerate(proposals, 1):
             features.append(
                 point_to_feature(
-                    proposal["lat"],
                     proposal["lon"],
+                    proposal["lat"],
                     properties={
                         "kind": "proposed_center",
                         "rank": i,
