@@ -45,9 +45,15 @@ export const fetchHealthDeserts = async (type, comuna, minutes) => {
   return res.data;
 };
 
-export const fetchPopulationCoverage = async (comuna, minutes) => {
+export const fetchPopulationCoverage = async (comuna, minutes, mode = 'walk', departureHour = null) => {
+  const endpoint = mode === 'transit'
+    ? '/api/v1/population/transit-coverage'
+    : '/api/v1/population/coverage';
   const params = { comuna: normalizeComuna(comuna), minutes };
-  const res = await api.get('/api/v1/population/coverage', { params });
+  if (mode === 'transit' && departureHour !== null) {
+    params.departure_hour = departureHour;
+  }
+  const res = await api.get(endpoint, { params });
   return res.data;
 };
 

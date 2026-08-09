@@ -94,7 +94,7 @@ def feature_collection(features, center_list=None, metadata=None):
                         "kind": "health_center",
                         "name": center.get(
                             "nombre",
-                            "Centro de salud"
+                            center.get("name", "Centro de salud")
                         )
                     }
                 )

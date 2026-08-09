@@ -4,6 +4,7 @@ import streamlit as st
 import folium
 import branca
 import geopandas as gpd
+import numpy as np
 from streamlit_folium import st_folium
 from shapely.geometry import shape
 
@@ -479,6 +480,7 @@ def call_population_coverage_api(
     minutes: int,
     comuna: str | None = None,
     departure_hour: int | None = None,
+    decay: str | None = None,
     api_url: str = None,
     spinner_text: str = "Calculando cobertura...",
     show_spinner: bool = True,
@@ -491,6 +493,8 @@ def call_population_coverage_api(
         params["comuna"] = comuna
     if departure_hour is not None:
         params["departure_hour"] = departure_hour
+    if decay is not None:
+        params["decay"] = decay
 
     try:
         if show_spinner:
@@ -518,64 +522,38 @@ def call_population_coverage_api(
 
 def call_population_coverage_rm(comunas: list[str], minutes: int, mode: str = "walk", departure_hour: int | None = None):
     """
-    Calcula la cobertura RM llamando una vez por comuna al endpoint individual.
-    Evita timeout del backend.
+    Calcula la cobertura RM usando el endpoint consolidado del backend.
     """
-    all_features = []
-    processed = []
-    failed = []
-
     endpoint = (
-        "/api/v1/population/coverage"
+        "/api/v1/population/coverage-rm"
         if mode == "walk"
-        else "/api/v1/population/transit-coverage"
+        else "/api/v1/population/transit-coverage-rm"
     )
 
-    total = len(comunas)
-    if total == 0:
-        return {"type": "FeatureCollection", "features": [], "metadata": {}}
+    try:
+        result = call_population_coverage_api(
+            endpoint=endpoint,
+            minutes=minutes,
+            departure_hour=departure_hour,
+            spinner_text=f"Calculando cobertura RM ({mode})...",
+            show_spinner=True,
+        )
 
-    progress = st.progress(0.0)
-    status = st.empty()
+        if result:
+            return result
 
-    for idx, comuna in enumerate(comunas, start=1):
-        status.write(f"Procesando {comuna} ({idx}/{total})...")
-        progress.progress(idx / total)
-
-        try:
-            result = call_population_coverage_api(
-                endpoint=endpoint,
-                comuna=comuna,
-                minutes=minutes,
-                departure_hour=departure_hour,
-                spinner_text=f"Procesando {comuna}...",
-                show_spinner=False,
-            )
-
-            if result and result.get("features"):
-                all_features.extend(result["features"])
-                processed.append(comuna)
-            else:
-                failed.append(comuna)
-
-        except Exception:
-            failed.append(comuna)
-
-    progress.empty()
-    status.empty()
+    except Exception:
+        pass
 
     return {
         "type": "FeatureCollection",
-        "features": all_features,
+        "features": [],
         "metadata": {
             "scope": "rm",
             "mode": mode,
             "minutes": minutes,
             "departure_hour": departure_hour,
-            "processed_comunas": processed,
-            "failed_comunas": failed,
-            "processed_count": len(processed),
-            "failed_count": len(failed),
+            "error": "No se pudo calcular la cobertura RM",
         },
     }
 
@@ -682,5 +660,208 @@ def render_population_coverage(data: dict, map_key: str = "population_map"):
     </div>
     """
     m.get_root().html.add_child(folium.Element(legend))
+
+    st_folium(m, width="100%", height=700, key=map_key)
+
+
+# ======================================================================
+# Accesibilidad 2SFCA (Bloque B)
+# ======================================================================
+
+def build_accessibility_gdfs(data: dict):
+    features = data.get("features", [])
+    block_rows = []
+    center_rows = []
+
+    for feature in features:
+        props = feature.get("properties", {})
+        kind = props.get("kind")
+        geom_data = feature.get("geometry")
+
+        if not geom_data:
+            continue
+
+        geom = shape(geom_data)
+
+        if kind == "census_block_accessibility":
+            block_rows.append({**props, "geometry": geom})
+        elif kind == "health_center":
+            center_rows.append({**props, "geometry": geom})
+
+    if block_rows:
+        blocks_gdf = gpd.GeoDataFrame(block_rows, geometry="geometry", crs="EPSG:4326")
+    else:
+        blocks_gdf = gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs="EPSG:4326")
+
+    if center_rows:
+        centers_gdf = gpd.GeoDataFrame(center_rows, geometry="geometry", crs="EPSG:4326")
+    else:
+        centers_gdf = gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs="EPSG:4326")
+
+    return blocks_gdf, centers_gdf
+
+
+def calculate_accessibility_statistics(data: dict) -> dict:
+    blocks_gdf, _ = build_accessibility_gdfs(data)
+
+    total_population = blocks_gdf["population"].fillna(0).sum()
+    desert_mask = blocks_gdf["status"] == "health_desert"
+    desert_population = blocks_gdf.loc[desert_mask, "population"].fillna(0).sum()
+    desert_blocks = int(desert_mask.sum())
+    total_blocks = len(blocks_gdf)
+
+    scores = blocks_gdf["accessibility_2sfca"].dropna()
+    mean_score = float(scores.mean()) if len(scores) > 0 else 0.0
+    median_score = float(scores.median()) if len(scores) > 0 else 0.0
+
+    desert_pct = (desert_population / total_population * 100) if total_population > 0 else 0
+
+    return {
+        "total_population": int(total_population),
+        "desert_population": int(desert_population),
+        "desert_pct": desert_pct,
+        "total_blocks": total_blocks,
+        "desert_blocks": desert_blocks,
+        "mean_score": mean_score,
+        "median_score": median_score,
+    }
+
+
+def render_accessibility_statistics(stats: dict):
+    col_pop, col_score = st.columns(2)
+
+    with col_pop:
+        st.metric("Población total", f"{stats['total_population']:,}")
+        st.metric("Población en desierto", f"{stats['desert_population']:,}")
+
+    with col_score:
+        st.metric("Manzanas en desierto", f"{stats['desert_pct']:.1f}%")
+        st.metric("Score 2SFCA promedio", f"{stats['mean_score']:.6f}")
+
+
+def render_accessibility_coverage(data: dict, map_key: str = "accessibility_map"):
+    features = data.get("features", [])
+
+    if not features:
+        st.warning("No hay datos")
+        return
+
+    blocks_gdf, centers_gdf = build_accessibility_gdfs(data)
+
+    if blocks_gdf.empty:
+        st.warning("No hay manzanas con datos de accesibilidad")
+        return
+
+    scores = blocks_gdf["accessibility_2sfca"].dropna()
+    has_scores = len(scores) > 0
+
+    if has_scores:
+        q25 = scores.quantile(0.25)
+        q50 = scores.quantile(0.50)
+        q75 = scores.quantile(0.75)
+
+    m = folium.Map(location=[-33.45, -70.65], zoom_start=11, tiles="cartodbpositron")
+
+    def style_accessibility(feature):
+        props = feature.get("properties", {})
+        status = props.get("status", "")
+        if status == "health_desert":
+            return {
+                "fillColor": "#d73027",
+                "color": "#a50f15",
+                "weight": 0.5,
+                "fillOpacity": 0.85,
+            }
+        if not has_scores:
+            return {
+                "fillColor": "#cccccc",
+                "color": "#999999",
+                "weight": 0.5,
+                "fillOpacity": 0.75,
+            }
+        score = float(props.get("accessibility_2sfca", 0) or 0)
+        if score <= q25:
+            color = "#fdae61"
+        elif score <= q50:
+            color = "#a6d96a"
+        elif score <= q75:
+            color = "#1a9641"
+        else:
+            color = "#005a32"
+        return {
+            "fillColor": color,
+            "color": "#666666",
+            "weight": 0.5,
+            "fillOpacity": 0.75,
+        }
+
+    for feature in features:
+        props = feature.get("properties", {})
+        kind = props.get("kind", "")
+
+        if kind == "health_center":
+            coords = feature.get("geometry", {}).get("coordinates", [])
+            if len(coords) >= 2:
+                folium.Marker(
+                    [coords[1], coords[0]],
+                    popup=props.get("name", props.get("nombre", "Centro de salud")),
+                    icon=folium.Icon(color="green", icon="glyphicon-plus"),
+                ).add_to(m)
+            continue
+
+        if kind == "census_block_accessibility":
+            score = props.get("accessibility_2sfca", 0)
+            population = props.get("population", 0)
+            status = props.get("status", "")
+
+            tooltip = (
+                f"<b>Población:</b> {float(population):.0f}<br>"
+                f"<b>Score 2SFCA:</b> {float(score):.6f}<br>"
+                f"<b>Estado:</b> {status}<br>"
+            )
+
+            folium.GeoJson(
+                feature,
+                style_function=style_accessibility,
+                tooltip=tooltip,
+            ).add_to(m)
+            continue
+
+    legend_items = [
+        '<i style="background:#d73027;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #a50f15"></i>'
+        " Desierto de salud",
+    ]
+    if has_scores:
+        legend_items += [
+            f'<br><i style="background:#fdae61;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #fdae61"></i>'
+            f" Baja (≤{q25:.4f})",
+            f'<br><i style="background:#a6d96a;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #a6d96a"></i>'
+            f" Media-baja (≤{q50:.4f})",
+            f'<br><i style="background:#1a9641;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #1a9641"></i>'
+            f" Media-alta (≤{q75:.4f})",
+            f'<br><i style="background:#005a32;width:16px;height:16px;float:left;margin-right:8px;border:1px solid #005a32"></i>'
+            f" Alta (>{q75:.4f})",
+        ]
+
+    legend_html = f"""
+    <div style="
+        position: fixed;
+        bottom: 45px;
+        left: 45px;
+        width: 260px;
+        background-color: rgba(255,255,255,0.95);
+        color: #111;
+        z-index:9999;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #cbd5e1;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+        font-size: 13px;
+    ">
+        <b>Accesibilidad 2SFCA</b><br><br>
+        {''.join(legend_items)}
+    </div>
+    """
+    m.get_root().html.add_child(folium.Element(legend_html))
 
     st_folium(m, width="100%", height=700, key=map_key)

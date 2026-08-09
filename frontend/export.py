@@ -6,8 +6,9 @@ from matplotlib_scalebar.scalebar import ScaleBar
 import streamlit as st
 import pandas as pd
 import textwrap
+import mapclassify
 
-from ui_components import build_population_coverage_gdfs
+from ui_components import build_population_coverage_gdfs, build_accessibility_gdfs
 from matplotlib.lines import Line2D
 
 
@@ -300,3 +301,74 @@ def export_full_population_coverage_map(data: dict, minutes: int):
         comuna="Región Metropolitana",
         include_cartographic_elements=True,
     )
+
+
+def _add_accessibility_legend(ax):
+    legend = [
+        Line2D([0], [0], marker="s", color="w", label="Desierto de salud",
+                markerfacecolor="#d73027", markersize=14),
+        Line2D([0], [0], marker="s", color="w", label="Baja accesibilidad",
+                markerfacecolor="#fdae61", markersize=14),
+        Line2D([0], [0], marker="s", color="w", label="Media-baja",
+                markerfacecolor="#a6d96a", markersize=14),
+        Line2D([0], [0], marker="s", color="w", label="Media-alta",
+                markerfacecolor="#1a9641", markersize=14),
+        Line2D([0], [0], marker="s", color="w", label="Alta accesibilidad",
+                markerfacecolor="#005a32", markersize=14),
+        Line2D([0], [0], marker="*", color="green", label="Centro de salud",
+                linestyle="None", markersize=14),
+    ]
+    ax.legend(handles=legend, title="Simbología", loc="upper left", framealpha=0.95)
+
+
+def export_accessibility_map(data: dict, minutes: int, comuna: str, decay: str):
+    blocks_gdf, centers_gdf = build_accessibility_gdfs(data)
+
+    if blocks_gdf.empty:
+        st.error("No hay datos de accesibilidad para exportar")
+        return None
+
+    try:
+        blocks_gdf = blocks_gdf.to_crs(epsg=32719)
+        centers_gdf = centers_gdf.to_crs(epsg=32719)
+    except Exception:
+        pass
+
+    blocks_gdf["accessibility_2sfca"] = blocks_gdf["accessibility_2sfca"].fillna(0)
+    desert_mask = blocks_gdf["status"] == "health_desert"
+    served = blocks_gdf[~desert_mask]
+
+    fig, ax = plt.subplots(figsize=(16, 16))
+
+    if not desert_mask.empty and desert_mask.any():
+        blocks_gdf[desert_mask].plot(
+            ax=ax, color="#d73027", edgecolor="#a50f15", linewidth=0.3, alpha=0.85
+        )
+
+    if not served.empty:
+        served.plot(
+            ax=ax,
+            column="accessibility_2sfca",
+            cmap="RdYlGn",
+            scheme="NaturalBreaks",
+            k=4,
+            edgecolor="#5b6b7a",
+            linewidth=0.3,
+            legend=False,
+        )
+
+    if not centers_gdf.empty:
+        centers_gdf.plot(ax=ax, color="green", markersize=150, marker="*")
+
+    _add_accessibility_legend(ax)
+
+    title = f"Accesibilidad 2SFCA - {comuna} ({minutes} min, decay={decay})"
+    ax.set_title(textwrap.fill(title, width=50), fontsize=14, fontweight="bold")
+    ax.set_axis_off()
+    _add_cartographic_elements(ax, "OpenStreetMap, DTPM, Censo 2024, MINSAL")
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=300, bbox_inches="tight", facecolor="white")
+    buf.seek(0)
+    plt.close(fig)
+    return buf

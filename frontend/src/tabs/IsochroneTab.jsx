@@ -11,22 +11,19 @@ export default function IsochroneTab() {
     address: "Av. Libertador Bernardo O'Higgins, Santiago"
   });
 
+  const [transportMode, setTransportMode] = useState('walk');
   const [minutes, setMinutes] = useState(30);
   const [loading, setLoading] = useState(false);
-  const [walkResult, setWalkResult] = useState(null);
-  const [transitResult, setTransitResult] = useState(null);
+  const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
   const handleCalculate = async () => {
     setLoading(true);
     setError(null);
+    setResult(null);
     try {
-      const [walkData, transitData] = await Promise.all([
-        fetchIsochrone('walk', location.lat, location.lon, minutes),
-        fetchIsochrone('transit', location.lat, location.lon, minutes),
-      ]);
-      setWalkResult(walkData);
-      setTransitResult(transitData);
+      const data = await fetchIsochrone(transportMode, location.lat, location.lon, minutes);
+      setResult(data);
     } catch (err) {
       console.error('Error calculando isócronas:', err);
       setError(err.response?.data?.detail || 'Error al conectar con la API de isócronas.');
@@ -34,6 +31,10 @@ export default function IsochroneTab() {
       setLoading(false);
     }
   };
+
+  const modeLabel = transportMode === 'walk' ? 'Caminando' : 'Transporte Público';
+  const modeIcon = transportMode === 'walk' ? Footprints : Bus;
+  const ModeIcon = modeIcon;
 
   return (
     <div className="space-y-6">
@@ -56,6 +57,31 @@ export default function IsochroneTab() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 bg-slate-900/60 border border-slate-800 rounded-2xl p-5 space-y-5 backdrop-blur-md">
           <LocationPicker location={location} setLocation={setLocation} />
+
+          {/* Transport Mode */}
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Modo de Transporte</label>
+            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => { setTransportMode('walk'); setResult(null); }}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${
+                  transportMode === 'walk' ? 'bg-sky-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Footprints className="w-3.5 h-3.5" />
+                Caminata
+              </button>
+              <button
+                onClick={() => { setTransportMode('transit'); setResult(null); }}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${
+                  transportMode === 'transit' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Bus className="w-3.5 h-3.5" />
+                Transporte Público
+              </button>
+            </div>
+          </div>
 
           {/* Minutes Slider */}
           <div className="space-y-2">
@@ -90,12 +116,12 @@ export default function IsochroneTab() {
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Calculando isócronas...</span>
+                <span>Calculando isócrona...</span>
               </>
             ) : (
               <>
                 <MapPin className="w-4 h-4" />
-                <span>Calcular Isócronas</span>
+                <span>Calcular Isócrona</span>
               </>
             )}
           </button>
@@ -107,34 +133,18 @@ export default function IsochroneTab() {
           )}
         </div>
 
-        {/* Results Side */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Walking Isochrone */}
+        {/* Result */}
+        <div className="lg:col-span-2">
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 backdrop-blur-md space-y-3">
-            <div className="flex items-center space-x-2 text-sky-400 font-semibold text-sm">
-              <Footprints className="w-4 h-4" />
-              <span>Caminando {minutes} minutos</span>
+            <div className={`flex items-center space-x-2 font-semibold text-sm ${transportMode === 'walk' ? 'text-sky-400' : 'text-indigo-400'}`}>
+              <ModeIcon className="w-4 h-4" />
+              <span>{modeLabel} — {minutes} minutos</span>
             </div>
-            {walkResult ? (
-              <MapView geoJsonData={walkResult} type="isochrone" minutes={minutes} />
+            {result ? (
+              <MapView geoJsonData={result} type="isochrone" minutes={minutes} />
             ) : (
               <div className="h-64 border border-dashed border-slate-800 rounded-xl flex items-center justify-center text-slate-500 text-xs">
-                Haz clic en "Calcular Isócronas" para generar el mapa caminando.
-              </div>
-            )}
-          </div>
-
-          {/* Transit Isochrone */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 backdrop-blur-md space-y-3">
-            <div className="flex items-center space-x-2 text-indigo-400 font-semibold text-sm">
-              <Bus className="w-4 h-4" />
-              <span>Usando Transporte Público ({minutes} minutos)</span>
-            </div>
-            {transitResult ? (
-              <MapView geoJsonData={transitResult} type="isochrone" minutes={minutes} />
-            ) : (
-              <div className="h-64 border border-dashed border-slate-800 rounded-xl flex items-center justify-center text-slate-500 text-xs">
-                Haz clic en "Calcular Isócronas" para generar el mapa con transporte público.
+                Selecciona origen y modo, luego haz clic en "Calcular Isócrona".
               </div>
             )}
           </div>

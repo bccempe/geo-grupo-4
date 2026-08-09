@@ -18,7 +18,8 @@ fi
 
 if [ ! -s "$RM_PBF" ]; then
     echo "Recortando Región Metropolitana (bbox: $RM_BBOX)..."
-    osmium extract --bbox "$RM_BBOX" --strategy=complete_ways \
+    rm -f "$RM_PBF"
+    osmium extract --bbox "$RM_BBOX" --strategy=simple \
         --output "$RM_PBF" "$CHILE_PBF"
 fi
 

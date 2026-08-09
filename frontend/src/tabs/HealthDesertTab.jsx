@@ -6,24 +6,20 @@ import { ShieldAlert, Download, Loader2, Hospital, Percent, Footprints, Bus } fr
 
 export default function HealthDesertTab() {
   const [comuna, setComuna] = useState('Santiago');
+  const [transportMode, setTransportMode] = useState('walk');
   const [minutes, setMinutes] = useState(30);
   const [loading, setLoading] = useState(false);
-  const [exportingWalk, setExportingWalk] = useState(false);
-  const [exportingTransit, setExportingTransit] = useState(false);
-  const [walkResult, setWalkResult] = useState(null);
-  const [transitResult, setTransitResult] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
   const handleCalculate = async () => {
     setLoading(true);
     setError(null);
+    setResult(null);
     try {
-      const [walkData, transitData] = await Promise.all([
-        fetchHealthDeserts('walk', comuna, minutes),
-        fetchHealthDeserts('transit', comuna, minutes),
-      ]);
-      setWalkResult(walkData);
-      setTransitResult(transitData);
+      const data = await fetchHealthDeserts(transportMode, comuna, minutes);
+      setResult(data);
     } catch (err) {
       console.error('Error calculando desiertos de salud:', err);
       setError(err.response?.data?.detail || 'Error al calcular desiertos de salud.');
@@ -32,32 +28,23 @@ export default function HealthDesertTab() {
     }
   };
 
-  const handleExportWalk = async () => {
-    if (!walkResult) return;
-    setExportingWalk(true);
+  const handleExport = async () => {
+    if (!result) return;
+    setExporting(true);
     try {
-      await exportHealthDesertPNG(walkResult, minutes, comuna, 'caminando');
+      const modeLabel = transportMode === 'walk' ? 'caminando' : 'transporte publico';
+      await exportHealthDesertPNG(result, minutes, comuna, modeLabel);
     } catch (err) {
       alert('Error exportando mapa PNG');
     } finally {
-      setExportingWalk(false);
+      setExporting(false);
     }
   };
 
-  const handleExportTransit = async () => {
-    if (!transitResult) return;
-    setExportingTransit(true);
-    try {
-      await exportHealthDesertPNG(transitResult, minutes, comuna, 'transporte publico');
-    } catch (err) {
-      alert('Error exportando mapa PNG');
-    } finally {
-      setExportingTransit(false);
-    }
-  };
-
-  const walkMeta = walkResult?.metadata || {};
-  const transitMeta = transitResult?.metadata || {};
+  const meta = result?.metadata || {};
+  const modeLabel = transportMode === 'walk' ? 'Caminando' : 'Transporte Público';
+  const modeIcon = transportMode === 'walk' ? Footprints : Bus;
+  const ModeIcon = modeIcon;
 
   return (
     <div className="space-y-6">
@@ -77,7 +64,32 @@ export default function HealthDesertTab() {
       </div>
 
       {/* Control Bar */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 backdrop-blur-md grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 backdrop-blur-md grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        {/* Transport Mode */}
+        <div className="space-y-1.5">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Modo</label>
+          <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <button
+              onClick={() => { setTransportMode('walk'); setResult(null); }}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${
+                transportMode === 'walk' ? 'bg-rose-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Footprints className="w-3.5 h-3.5" />
+              Caminata
+            </button>
+            <button
+              onClick={() => { setTransportMode('transit'); setResult(null); }}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${
+                transportMode === 'transit' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Bus className="w-3.5 h-3.5" />
+              TP
+            </button>
+          </div>
+        </div>
+
         {/* Comuna Selector */}
         <div className="space-y-1.5">
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -122,7 +134,7 @@ export default function HealthDesertTab() {
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Calculando desiertos...</span>
+              <span>Calculando...</span>
             </>
           ) : (
             <>
@@ -140,94 +152,47 @@ export default function HealthDesertTab() {
       )}
 
       {/* Results View */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Walking Results */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 backdrop-blur-md space-y-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-2 text-rose-400 font-semibold text-sm">
-              <Footprints className="w-4 h-4" />
-              <span>Caminando {minutes} minutos ({comuna})</span>
-            </div>
-            {walkResult && (
-              <button
-                onClick={handleExportWalk}
-                disabled={exportingWalk}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 flex items-center gap-1.5 transition-all"
-              >
-                {exportingWalk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 text-sky-400" />}
-                <span>Exportar PNG</span>
-              </button>
-            )}
+      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 backdrop-blur-md space-y-4">
+        <div className="flex justify-between items-center">
+          <div className={`flex items-center space-x-2 font-semibold text-sm ${transportMode === 'walk' ? 'text-rose-400' : 'text-indigo-400'}`}>
+            <ModeIcon className="w-4 h-4" />
+            <span>{modeLabel} — {minutes} min ({comuna})</span>
           </div>
-
-          {walkResult ? (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard
-                  title="Centros en Comuna"
-                  value={walkMeta.centers_count ?? 0}
-                  icon={Hospital}
-                  color="emerald"
-                />
-                <StatCard
-                  title="Nivel Desierto"
-                  value={`${(walkMeta.desert_pct ?? 0).toFixed(1)}%`}
-                  icon={Percent}
-                  color="rose"
-                />
-              </div>
-              <MapView geoJsonData={walkResult} type="desert" minutes={minutes} />
-            </>
-          ) : (
-            <div className="h-64 border border-dashed border-slate-800 rounded-xl flex items-center justify-center text-slate-500 text-xs">
-              Selecciona comuna y haz clic en "Calcular Desiertos".
-            </div>
+          {result && (
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 flex items-center gap-1.5 transition-all"
+            >
+              {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 text-sky-400" />}
+              <span>Exportar PNG</span>
+            </button>
           )}
         </div>
 
-        {/* Public Transit Results */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 backdrop-blur-md space-y-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-2 text-indigo-400 font-semibold text-sm">
-              <Bus className="w-4 h-4" />
-              <span>Transporte Público {minutes} min ({comuna})</span>
+        {result ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard
+                title="Centros en Comuna"
+                value={meta.centers_count ?? 0}
+                icon={Hospital}
+                color="emerald"
+              />
+              <StatCard
+                title="Nivel Desierto"
+                value={`${(meta.desert_pct ?? 0).toFixed(1)}%`}
+                icon={Percent}
+                color="rose"
+              />
             </div>
-            {transitResult && (
-              <button
-                onClick={handleExportTransit}
-                disabled={exportingTransit}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 flex items-center gap-1.5 transition-all"
-              >
-                {exportingTransit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 text-sky-400" />}
-                <span>Exportar PNG</span>
-              </button>
-            )}
+            <MapView geoJsonData={result} type="desert" minutes={minutes} />
+          </>
+        ) : (
+          <div className="h-64 border border-dashed border-slate-800 rounded-xl flex items-center justify-center text-slate-500 text-xs">
+            Selecciona comuna, modo y haz clic en "Calcular Desiertos".
           </div>
-
-          {transitResult ? (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard
-                  title="Centros en Comuna"
-                  value={transitMeta.centers_count ?? 0}
-                  icon={Hospital}
-                  color="emerald"
-                />
-                <StatCard
-                  title="Nivel Desierto"
-                  value={`${(transitMeta.desert_pct ?? 0).toFixed(1)}%`}
-                  icon={Percent}
-                  color="rose"
-                />
-              </div>
-              <MapView geoJsonData={transitResult} type="desert" minutes={minutes} />
-            </>
-          ) : (
-            <div className="h-64 border border-dashed border-slate-800 rounded-xl flex items-center justify-center text-slate-500 text-xs">
-              Selecciona comuna y haz clic en "Calcular Desiertos".
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

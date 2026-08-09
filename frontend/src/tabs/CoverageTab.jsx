@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import MapView from '../components/MapView';
 import StatCard from '../components/StatCard';
 import { comunasDisponibles, fetchPopulationCoverage, exportPopulationCoveragePNG } from '../api/apiService';
-import { Users, Download, Loader2, UserCheck, HeartHandshake, Percent, Layers } from 'lucide-react';
+import { Users, Download, Loader2, UserCheck, HeartHandshake, Percent, Layers, Footprints, Bus } from 'lucide-react';
 
 export default function CoverageTab() {
   const [mode, setMode] = useState('comuna'); // 'comuna' or 'rm'
+  const [transportMode, setTransportMode] = useState('walk'); // 'walk' or 'transit'
   const [comuna, setComuna] = useState('Santiago');
   const [minutes, setMinutes] = useState(15);
+  const [departureHour, setDepartureHour] = useState(8);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [coverageResult, setCoverageResult] = useState(null);
@@ -44,7 +46,7 @@ export default function CoverageTab() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPopulationCoverage(comuna, minutes);
+      const data = await fetchPopulationCoverage(comuna, minutes, transportMode, departureHour);
       setCoverageResult(data);
     } catch (err) {
       console.error('Error calculando cobertura poblacional:', err);
@@ -67,7 +69,7 @@ export default function CoverageTab() {
         const c = comunasDisponibles[i];
         setRmProgress({ current: i + 1, total, name: c });
         try {
-          const res = await fetchPopulationCoverage(c, minutes);
+          const res = await fetchPopulationCoverage(c, minutes, transportMode, departureHour);
           if (res?.features) {
             allFeatures.push(...res.features);
             processed.push(c);
@@ -148,6 +150,31 @@ export default function CoverageTab() {
             </div>
           </div>
 
+          {/* Transport Mode Selector */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Modo de Transporte</label>
+            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setTransportMode('walk')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${
+                  transportMode === 'walk' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Footprints className="w-3.5 h-3.5" />
+                Caminata
+              </button>
+              <button
+                onClick={() => setTransportMode('transit')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${
+                  transportMode === 'transit' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Bus className="w-3.5 h-3.5" />
+                Transporte Público
+              </button>
+            </div>
+          </div>
+
           {/* Comuna Selector (if mode == 'comuna') */}
           {mode === 'comuna' ? (
             <div className="space-y-1.5">
@@ -167,11 +194,15 @@ export default function CoverageTab() {
               <span className="font-semibold text-slate-200">51 Comunas</span> de la Región Metropolitana consolidada.
             </div>
           )}
+        </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
           {/* Minutes Slider */}
           <div className="space-y-1.5">
             <div className="flex justify-between items-center text-xs text-slate-300">
-              <label className="font-semibold uppercase tracking-wider text-slate-400">Minutos vehículo:</label>
+              <label className="font-semibold uppercase tracking-wider text-slate-400">
+                {transportMode === 'walk' ? 'Minutos caminando:' : 'Minutos en TP:'}
+              </label>
               <span className="px-2.5 py-0.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-lg font-bold">
                 {minutes} min
               </span>
@@ -186,6 +217,29 @@ export default function CoverageTab() {
               className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
             />
           </div>
+
+          {/* Departure Hour Slider (only for transit) */}
+          {transportMode === 'transit' ? (
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-xs text-slate-300">
+                <label className="font-semibold uppercase tracking-wider text-slate-400">Hora de salida:</label>
+                <span className="px-2.5 py-0.5 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-lg font-bold">
+                  {departureHour}:00
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={23}
+                step={1}
+                value={departureHour}
+                onChange={(e) => setDepartureHour(Number(e.target.value))}
+                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+              />
+            </div>
+          ) : (
+            <div />
+          )}
         </div>
 
         {/* Action Button */}

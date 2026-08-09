@@ -8,13 +8,17 @@ from ui_components import (
     render_population_coverage,
     call_population_coverage_rm,
     calculate_coverage_statistics,
-    render_coverage_statistics
+    render_coverage_statistics,
+    render_accessibility_coverage,
+    calculate_accessibility_statistics,
+    render_accessibility_statistics,
 )
 
 from export import (
     export_health_desert_map, 
     export_population_coverage_map,
-    export_full_population_coverage_map
+    export_full_population_coverage_map,
+    export_accessibility_map,
 )
 
 import streamlit as st
@@ -198,191 +202,290 @@ with coverage_tab:
 
     st.info("La cobertura poblacional se refiere al porcentaje de la población que puede acceder a un centro de salud primaria (CESFAM, SAPU) movilizándose durante una determinada cantidad de tiempo.")
 
-    col_cov_scope, col_cov_mode = st.columns([1, 1])
+    coverage_method = st.radio(
+        "Método de cálculo",
+        ["Cobertura (polígono)", "Accesibilidad 2SFCA"],
+        horizontal=True,
+        key="coverage_method"
+    )
 
-    with col_cov_scope:
-        coverage_scope = st.radio(
-            "Alcance",
-            [
-                "Por comuna",
-                "Región Metropolitana completa"
-            ],
-            horizontal=True
-        )
+    accessibility_mode = coverage_method == "Accesibilidad 2SFCA"
 
-    with col_cov_mode:
-        coverage_transport = st.radio(
-            "Modo de transporte",
-            [
-                "Caminata",
-                "Transporte público"
-            ],
-            horizontal=True,
-            key="coverage_transport"
-        )
+    # ==================================================================
+    # MODO COBERTURA TRADICIONAL (polígono)
+    # ==================================================================
+    if not accessibility_mode:
 
-    col_cov_minutes, col_cov_hour = st.columns([1, 1])
+        col_cov_scope, col_cov_mode = st.columns([1, 1])
 
-    with col_cov_minutes:
-        coverage_minutes = st.slider(
-            "Minutos",
-            5,
-            60,
-            15 if coverage_transport == "Caminata" else 30,
-            key="coverage_minutes"
-        )
-
-    with col_cov_hour:
-        if coverage_transport == "Transporte público":
-            departure_hour = st.slider(
-                "Hora de salida",
-                0,
-                23,
-                8,
-                key="coverage_departure_hour"
+        with col_cov_scope:
+            coverage_scope = st.radio(
+                "Alcance",
+                [
+                    "Por comuna",
+                    "Región Metropolitana completa"
+                ],
+                horizontal=True
             )
-        else:
-            departure_hour = None
 
-    transit_mode = coverage_transport == "Transporte público"
+        with col_cov_mode:
+            coverage_transport = st.radio(
+                "Modo de transporte",
+                [
+                    "Caminata",
+                    "Transporte público"
+                ],
+                horizontal=True,
+                key="coverage_transport"
+            )
 
-    # ==================================================
-    # COBERTURA POR COMUNA
-    # ==================================================
-    if coverage_scope == "Por comuna":
+        col_cov_minutes, col_cov_hour = st.columns([1, 1])
 
-        coverage_comuna = st.selectbox(
-            "Comuna",
-            comunas_disponibles,
-            key="coverage_comuna"
-        )
+        with col_cov_minutes:
+            coverage_minutes = st.slider(
+                "Minutos",
+                5,
+                60,
+                15 if coverage_transport == "Caminata" else 30,
+                key="coverage_minutes"
+            )
 
-        query_comuna = normalize_comuna(
-            coverage_comuna
-        )
-
-        endpoint = (
-            "/api/v1/population/transit-coverage"
-            if transit_mode
-            else "/api/v1/population/coverage"
-        )
-
-        if st.button(
-            "Calcular cobertura",
-            type="primary",
-            key="coverage_btn",
-            icon=":material/map_search:"
-        ):
-
-            st.session_state.coverage_result = (
-                call_population_coverage_api(
-                    endpoint=endpoint,
-                    comuna=query_comuna,
-                    minutes=coverage_minutes,
-                    departure_hour=departure_hour if transit_mode else None,
-                    spinner_text=(
-                        f"Calculando cobertura poblacional "
-                        f"en {coverage_comuna}..."
-                    )
+        with col_cov_hour:
+            if coverage_transport == "Transporte público":
+                departure_hour = st.slider(
+                    "Hora de salida",
+                    0,
+                    23,
+                    8,
+                    key="coverage_departure_hour"
                 )
+            else:
+                departure_hour = None
+
+        transit_mode = coverage_transport == "Transporte público"
+
+        # ==================================================
+        # COBERTURA POR COMUNA
+        # ==================================================
+        if coverage_scope == "Por comuna":
+
+            coverage_comuna = st.selectbox(
+                "Comuna",
+                comunas_disponibles,
+                key="coverage_comuna"
             )
 
-        if st.session_state.get("coverage_result"):
-
-            render_population_coverage(
-                st.session_state.coverage_result,
-                map_key="coverage_map"
+            query_comuna = normalize_comuna(
+                coverage_comuna
             )
 
-            stats = calculate_coverage_statistics(
-                st.session_state.coverage_result
-            )
-            render_coverage_statistics(stats)
-
-            buf_coverage_comuna = export_population_coverage_map(
-                st.session_state.coverage_result,
-                minutes=coverage_minutes,
-                comuna=coverage_comuna,
-                include_cartographic_elements=True
-            )
-            if buf_coverage_comuna:
-                st.download_button(
-                    label="Exportar a PNG",
-                    type="primary",
-                    data=buf_coverage_comuna,
-                    file_name=f"population_coverage_{query_comuna}_{coverage_minutes}min.png",
-                    mime="image/png",
-                    key="export_coverage_comuna",
-                    icon=":material/file_export:",
-                    width="stretch"
-                )
-
-    # ==================================================
-    # COBERTURA RM
-    # ==================================================
-    else:
-
-        st.warning(
-            "La cobertura de toda la Región Metropolitana "
-            "contiene millones de vértices y no puede "
-            "visualizarse de forma interactiva en Streamlit."
-        )
-
-        if st.button(
-            "Generar mapa RM",
-            key="coverage_rm_btn",
-            type="primary",
-            icon=":material/map_search:"
-        ):
-
-            mode_label = (
-                "transporte público"
+            endpoint = (
+                "/api/v1/population/transit-coverage"
                 if transit_mode
-                else "caminata"
+                else "/api/v1/population/coverage"
             )
 
-            with st.spinner(
-                f"Calculando cobertura RM ({mode_label})..."
+            if st.button(
+                "Calcular cobertura",
+                type="primary",
+                key="coverage_btn",
+                icon=":material/map_search:"
             ):
 
-                rm_result = call_population_coverage_rm(
-                    comunas=[
-                        normalize_comuna(c)
-                        for c in comunas_disponibles
-                    ],
-                    minutes=coverage_minutes,
-                    mode="transit" if transit_mode else "walk",
-                    departure_hour=departure_hour if transit_mode else None
-                )
-
-                if rm_result:
-                    st.session_state.rm_result = rm_result
-                    st.session_state.stats_rm = calculate_coverage_statistics(rm_result)
-                    st.session_state.png_buffer = (
-                        export_full_population_coverage_map(
-                            rm_result,
-                            minutes=coverage_minutes
+                st.session_state.coverage_result = (
+                    call_population_coverage_api(
+                        endpoint=endpoint,
+                        comuna=query_comuna,
+                        minutes=coverage_minutes,
+                        departure_hour=departure_hour if transit_mode else None,
+                        spinner_text=(
+                            f"Calculando cobertura poblacional "
+                            f"en {coverage_comuna}..."
                         )
                     )
+                )
 
-                else:
-                    st.session_state.rm_result = None
-                    st.session_state.stats_rm = None
-                    st.session_state.png_buffer = None
+            if st.session_state.get("coverage_result"):
 
-        if st.session_state.get("rm_result"):
-            render_coverage_statistics(st.session_state.stats_rm)
+                render_population_coverage(
+                    st.session_state.coverage_result,
+                    map_key="coverage_map"
+                )
 
-            if st.session_state.get("png_buffer"):
+                stats = calculate_coverage_statistics(
+                    st.session_state.coverage_result
+                )
+                render_coverage_statistics(stats)
+
+                buf_coverage_comuna = export_population_coverage_map(
+                    st.session_state.coverage_result,
+                    minutes=coverage_minutes,
+                    comuna=coverage_comuna,
+                    include_cartographic_elements=True
+                )
+                if buf_coverage_comuna:
+                    st.download_button(
+                        label="Exportar a PNG",
+                        type="primary",
+                        data=buf_coverage_comuna,
+                        file_name=f"population_coverage_{query_comuna}_{coverage_minutes}min.png",
+                        mime="image/png",
+                        key="export_coverage_comuna",
+                        icon=":material/file_export:",
+                        width="stretch"
+                    )
+
+        # ==================================================
+        # COBERTURA RM
+        # ==================================================
+        else:
+
+            st.warning(
+                "La cobertura de toda la Región Metropolitana "
+                "contiene millones de vértices y no puede "
+                "visualizarse de forma interactiva en Streamlit."
+            )
+
+            if st.button(
+                "Generar mapa RM",
+                key="coverage_rm_btn",
+                type="primary",
+                icon=":material/map_search:"
+            ):
+
+                mode_label = (
+                    "transporte público"
+                    if transit_mode
+                    else "caminata"
+                )
+
+                with st.spinner(
+                    f"Calculando cobertura RM ({mode_label})..."
+                ):
+
+                    rm_result = call_population_coverage_rm(
+                        comunas=[
+                            normalize_comuna(c)
+                            for c in comunas_disponibles
+                        ],
+                        minutes=coverage_minutes,
+                        mode="transit" if transit_mode else "walk",
+                        departure_hour=departure_hour if transit_mode else None
+                    )
+
+                    if rm_result:
+                        st.session_state.rm_result = rm_result
+                        st.session_state.stats_rm = calculate_coverage_statistics(rm_result)
+                        st.session_state.png_buffer = (
+                            export_full_population_coverage_map(
+                                rm_result,
+                                minutes=coverage_minutes
+                            )
+                        )
+
+                    else:
+                        st.session_state.rm_result = None
+                        st.session_state.stats_rm = None
+                        st.session_state.png_buffer = None
+
+            if st.session_state.get("rm_result"):
+                render_coverage_statistics(st.session_state.stats_rm)
+
+                if st.session_state.get("png_buffer"):
+                    st.download_button(
+                        label="Exportar a PNG",
+                        data=st.session_state.png_buffer,
+                        file_name=(
+                            f"cobertura_rm_"
+                            f"{coverage_minutes}min.png"
+                            ),
+                        mime="image/png",
+                        icon=":material/file_export:",
+                        type="primary",
+                        width="stretch"
+                    )
+
+    # ==================================================================
+    # MODO ACCESIBILIDAD 2SFCA (Bloque B)
+    # ==================================================================
+    else:
+
+        col_acc_comuna, col_acc_minutes = st.columns([1, 1])
+
+        with col_acc_comuna:
+            acc_comuna = st.selectbox(
+                "Comuna",
+                comunas_disponibles,
+                key="accessibility_comuna"
+            )
+            query_comuna_acc = normalize_comuna(acc_comuna)
+
+        with col_acc_minutes:
+            acc_minutes = st.slider(
+                "Minutos",
+                5,
+                60,
+                15,
+                key="accessibility_minutes"
+            )
+
+        decay_display = {
+            "step": "Step (corte binario)",
+            "gaussian": "Gaussian (decaimento suave)",
+            "linear": "Linear (decaimento lineal)",
+        }
+        acc_decay = st.selectbox(
+            "Función de decaimiento",
+            options=list(decay_display.keys()),
+            format_func=lambda d: decay_display[d],
+            key="accessibility_decay",
+            help=(
+                "Step: accesibilidad binaria (tiene o no tiene acceso). "
+                "Gaussian/Linear: ponderan la oferta según distancia; "
+                "más realista para analizar intensidad del servicio."
+            )
+        )
+
+        if st.button(
+            "Calcular accesibilidad",
+            type="primary",
+            key="accessibility_btn",
+            icon=":material/map_search:"
+        ):
+            st.session_state.accessibility_result = call_population_coverage_api(
+                endpoint="/api/v1/population/accessibility",
+                comuna=query_comuna_acc,
+                minutes=acc_minutes,
+                decay=acc_decay,
+                spinner_text=f"Calculando accesibilidad 2SFCA en {acc_comuna}...",
+            )
+
+        if st.session_state.get("accessibility_result"):
+
+            render_accessibility_coverage(
+                st.session_state.accessibility_result,
+                map_key="accessibility_map"
+            )
+
+            acc_stats = calculate_accessibility_statistics(
+                st.session_state.accessibility_result
+            )
+            render_accessibility_statistics(acc_stats)
+
+            buf_accessibility = export_accessibility_map(
+                st.session_state.accessibility_result,
+                minutes=acc_minutes,
+                comuna=acc_comuna,
+                decay=acc_decay,
+            )
+            if buf_accessibility:
                 st.download_button(
                     label="Exportar a PNG",
-                    data=st.session_state.png_buffer,
-                    file_name=(
-                        f"cobertura_rm_"
-                        f"{coverage_minutes}min.png"
-                        ),
-                    mime="image/png",
-                    icon=":material/file_export:",
                     type="primary",
+                    data=buf_accessibility,
+                    file_name=f"accessibility_2sfca_{query_comuna_acc}_{acc_minutes}min_{acc_decay}.png",
+                    mime="image/png",
+                    key="export_accessibility_comuna",
+                    icon=":material/file_export:",
                     width="stretch"
                 )
