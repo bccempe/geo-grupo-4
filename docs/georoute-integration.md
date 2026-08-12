@@ -34,14 +34,16 @@ versionar:
 - `backend/data/georoute/rm-car.chg`
 
 Una vez disponibles los cuatro artefactos,
-`docker compose --profile web up --build` inicia PostGIS, los dos servidores
-georoute y el backend.
+`docker compose --profile web up --build` inicia PostGIS, los servidores
+georoute para caminata, automovil y transporte publico, y el backend.
 
 ## Contrato
 
 - `georoute-foot:8090` procesa isocronas peatonales y 2SFCA.
 - `georoute-car:8090` procesa isocronas vehiculares.
-- Ambos reciben y devuelven coordenadas WGS84 (`lon,lat`, EPSG:4326).
+- `georoute-transit:8090` procesa isocronas multimodales
+  caminata -> transporte publico -> caminata con RAPTOR sobre GTFS.
+- Los tres reciben y devuelven coordenadas WGS84 (`lon,lat`, EPSG:4326).
 - Los calculos de area/interseccion existentes deben seguir usando EPSG:32719;
   la capa de datos debe entregar esas geometrias reproyectadas antes de medir.
 
@@ -53,14 +55,37 @@ usan `georoute-foot` y mantienen el contrato `FeatureCollection`.
 Los endpoints vehiculares `GET /api/v1/car/health-deserts` y
 `GET /api/v1/car/health-deserts-rm` usan `georoute-car`.
 
-Los endpoints de transporte publico siguen usando el grafo GTFS multimodal en
-Python/NetworkX porque el compose actual no define un servidor georoute con
-perfil de transporte publico ni un contrato HTTP para GTFS.
+Los endpoints `GET /api/v1/transit/isochrone`,
+`GET /api/v1/transit/health-deserts`,
+`GET /api/v1/population/transit-coverage` y
+`GET /api/v1/population/transit-coverage-rm` usan `georoute-transit`.
+El binario HTTP adicional se compila dentro del workspace del motor y reutiliza
+`georoute-core::multimodal::Multimodal`, el grafo `rm-foot.grt` y el feed GTFS.
+Expone `/isochrone` para un origen y `/isochrones` para procesar en lote los
+centros de salud sin recargar el grafo por cada centro.
+
+El feed del proyecto describe la mayor parte de los buses mediante
+`shapes.txt` y `frequencies.txt`, pero no incluye sus secuencias en
+`stop_times.txt`. Antes de cargar RAPTOR, `georoute-gtfs-normalizer` genera esas
+secuencias en Rust: asigna paradas a trazados dentro de 50 metros y estima los
+tiempos entre paradas a 15 km/h, los mismos parametros usados por el flujo
+multimodal anterior. El GTFS original permanece de solo lectura y el resultado
+normalizado vive en `/tmp` dentro del contenedor.
+
+La fecha de servicio GTFS usa el dia de inicio del contenedor. Se puede fijar
+para una corrida reproducible con `GEOROUTE_TRANSIT_DATE=YYYYMMDD`.
+
+Los endpoints `/api/v1/population/coverage` y
+`/api/v1/population/coverage-rm` aceptan `profile=foot|car`. El frontend React
+permite seleccionar caminata, automovil o transporte publico y conserva mapas,
+estadisticas por manzana y exportacion PNG para los tres modos.
 
 Ejemplo:
 
 ```text
 /api/v1/population/accessibility?comuna=puente_alto&minutes=30&decay=step
+/api/v1/population/coverage?comuna=puente_alto&minutes=30&profile=car
+/api/v1/population/transit-coverage?comuna=puente_alto&minutes=45&departure_hour=8
 ```
 
 ## Validacion y benchmark

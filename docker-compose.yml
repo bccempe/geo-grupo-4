@@ -36,6 +36,8 @@ services:
         condition: service_healthy
       georoute-car:
         condition: service_healthy
+      georoute-transit:
+        condition: service_healthy
     env_file:
       - .env
     ports:
@@ -87,6 +89,38 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    profiles:
+      - web
+
+  georoute-transit:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.georoute
+    container_name: georoute_transit
+    restart: always
+    depends_on:
+      georoute-graph-builder:
+        condition: service_completed_successfully
+    volumes:
+      - ./backend/data/georoute:/graphs:ro
+      - ./backend/data/GTFS_20260321_v3:/gtfs:ro
+    environment:
+      GEOROUTE_TRANSIT_DATE: ${GEOROUTE_TRANSIT_DATE:-}
+    command:
+      - /bin/sh
+      - -c
+      - >-
+        georoute-gtfs-normalizer /gtfs /tmp/georoute-gtfs &&
+        exec georoute-transit-server /graphs/rm-foot.grt
+        --gtfs /tmp/georoute-gtfs
+        --date "$${GEOROUTE_TRANSIT_DATE:-$$(date +%Y%m%d)}"
+        --bind 0.0.0.0:8090
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:8090/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 60s
     profiles:
       - web
 

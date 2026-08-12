@@ -47,11 +47,18 @@ def export_population_coverage(payload: Dict[str, Any] = Body(...)):
         start_time = time.perf_counter()
         data = payload.get("data", {})
         minutes = int(payload.get("minutes", 15))
+        mode = str(payload.get("mode", "foot"))
+        mode_labels = {
+            "foot": "Caminando",
+            "car": "Automóvil",
+            "transit": "Transporte público",
+        }
         comuna = payload.get("comuna", "Región Metropolitana")
 
         png_bytes = service.export_population_coverage_map(
             data=data,
             minutes=minutes,
+            title=f"Cobertura poblacional - {mode_labels.get(mode, mode)}",
             comuna=comuna
         )
         elapsed = time.perf_counter() - start_time

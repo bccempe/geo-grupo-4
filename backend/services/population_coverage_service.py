@@ -2,6 +2,7 @@ from shapely.geometry import mapping
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 from shapely.geometry import shape
+from shapely.prepared import prep
 
 from repository.cov_poblacional_repository import CensusRepository
 from repository.gtfs_repository import GTFSRepository
@@ -77,6 +78,7 @@ class PopulationCoverageService:
     def __init__(self):
         self.census_repository = CensusRepository()
         self.health_desert_service = GeorouteHealthDesertService(profile="foot")
+        self.car_health_desert_service = GeorouteHealthDesertService(profile="car")
         self.transit_health_desert_service = TransitHealthDesertService()
 
         self.gtfs_repo = GTFSRepository()
@@ -162,12 +164,24 @@ class PopulationCoverageService:
             return None
         return geom
 
-    def _extract_coverage_polygon(self, comuna: str, minutes: float) -> BaseGeometry:
+    def _extract_coverage_polygon(
+        self,
+        comuna: str,
+        minutes: float,
+        profile: str = "foot",
+    ) -> BaseGeometry:
         """
         Reutiliza el servicio que ya funciona para caminata y extrae
         solo el polígono de cobertura.
         """
-        result = self.health_desert_service.build_health_deserts(
+        services = {
+            "foot": self.health_desert_service,
+            "car": self.car_health_desert_service,
+        }
+        if profile not in services:
+            raise ValueError("El perfil de cobertura debe ser 'foot' o 'car'")
+
+        result = services[profile].build_health_deserts(
             comuna=comuna,
             minutes=minutes
         )
@@ -198,6 +212,7 @@ class PopulationCoverageService:
         covered_elderly_population = 0.0
 
         covered_blocks = 0
+        prepared_coverage = prep(coverage_polygon)
 
         for block in blocks:
             geom = block.get("geometry")
@@ -213,10 +228,13 @@ class PopulationCoverageService:
             block_area = geom.area
             coverage_ratio = 0.0
 
-            if block_area > 0 and coverage_polygon.intersects(geom):
-                overlap = coverage_polygon.intersection(geom)
-                if overlap is not None and not overlap.is_empty:
-                    coverage_ratio = min(1.0, float(overlap.area) / float(block_area))
+            if block_area > 0:
+                if prepared_coverage.covers(geom):
+                    coverage_ratio = 1.0
+                elif prepared_coverage.intersects(geom):
+                    overlap = coverage_polygon.intersection(geom)
+                    if overlap is not None and not overlap.is_empty:
+                        coverage_ratio = min(1.0, float(overlap.area) / float(block_area))
 
             block_covered_population = population * coverage_ratio
             block_covered_elderly = elderly_population * coverage_ratio
@@ -283,7 +301,12 @@ class PopulationCoverageService:
 
         return features, summary
 
-    def build_population_coverage(self, comuna: str, minutes: float = 15):
+    def build_population_coverage(
+        self,
+        comuna: str,
+        minutes: float = 15,
+        profile: str = "foot",
+    ):
         comuna_slug = normalize_to_slug(comuna)
 
         centers = self.gtfs_repo.get_centers_by_comuna(comuna_slug)
@@ -293,7 +316,8 @@ class PopulationCoverageService:
 
         coverage_polygon = self._extract_coverage_polygon(
             comuna=comuna_slug,
-            minutes=minutes
+            minutes=minutes,
+            profile=profile,
         )
 
         blocks = self.census_repository.load_blocks_by_comuna(comuna_slug)
@@ -316,7 +340,7 @@ class PopulationCoverageService:
                     "comuna": comuna_slug,
                     "minutes": minutes,
                     "engine": "georoute",
-                    "profile": "foot"
+                    "profile": profile
                 }
             )
         ]
@@ -329,12 +353,17 @@ class PopulationCoverageService:
                 "scope": "comuna",
                 "minutes": minutes,
                 "engine": "georoute",
-                "profile": "foot",
+                "profile": profile,
                 **summary
             }
         )
 
-    def build_population_coverage_rm(self, minutes: float = 15, comunas: list[str] | None = None):
+    def build_population_coverage_rm(
+        self,
+        minutes: float = 15,
+        comunas: list[str] | None = None,
+        profile: str = "foot",
+    ):
         comunas = comunas or RM_COMUNAS
 
         coverage_polygons = []
@@ -347,7 +376,8 @@ class PopulationCoverageService:
             try:
                 coverage_polygon = self._extract_coverage_polygon(
                     comuna=comuna_slug,
-                    minutes=minutes
+                    minutes=minutes,
+                    profile=profile,
                 )
                 coverage_polygons.append(coverage_polygon)
             except Exception:
@@ -388,7 +418,7 @@ class PopulationCoverageService:
                     "scope": "rm",
                     "minutes": minutes,
                     "engine": "georoute",
-                    "profile": "foot"
+                    "profile": profile
                 }
             )
         ]
@@ -397,7 +427,7 @@ class PopulationCoverageService:
         summary.update({
             "scope": "rm",
             "engine": "georoute",
-            "profile": "foot",
+            "profile": profile,
             "comunas": comunas,
             "comunas_count": len(comunas),
             "failed_comunas": failed_comunas,
@@ -442,6 +472,7 @@ class PopulationCoverageService:
         minutes: float = 30,
         departure_hour: int | None = None
     ):
+        departure_hour = 8 if departure_hour is None else departure_hour
 
         comuna_slug = normalize_to_slug(comuna)
 
@@ -469,7 +500,7 @@ class PopulationCoverageService:
             blocks=blocks,
             coverage_polygon=coverage_polygon,
             comuna_slug=comuna_slug,
-            engine="python_networkx"
+            engine="georoute"
         )
 
         features = [
@@ -481,7 +512,9 @@ class PopulationCoverageService:
                     "comuna": comuna_slug,
                     "minutes": minutes,
                     "departure_hour": departure_hour,
-                    "engine": "python_networkx"
+                    "engine": "georoute",
+                    "profile": "transit",
+                    "algorithm": "raptor_multimodal"
                 }
             )
         ]
@@ -495,7 +528,9 @@ class PopulationCoverageService:
                 "mode": "transit",
                 "minutes": minutes,
                 "departure_hour": departure_hour,
-                "engine": "python_networkx",
+                "engine": "georoute",
+                "profile": "transit",
+                "algorithm": "raptor_multimodal",
                 **summary
             }
         )
@@ -506,6 +541,7 @@ class PopulationCoverageService:
         departure_hour: int | None = None,
         comunas: list[str] | None = None,
     ):
+        departure_hour = 8 if departure_hour is None else departure_hour
 
         comunas = comunas or RM_COMUNAS
 
@@ -563,7 +599,7 @@ class PopulationCoverageService:
             blocks=all_blocks,
             coverage_polygon=rm_coverage,
             comuna_slug="rm",
-            engine="python_networkx"
+            engine="georoute"
         )
 
         features = [
@@ -575,7 +611,9 @@ class PopulationCoverageService:
                     "scope": "rm",
                     "minutes": minutes,
                     "departure_hour": departure_hour,
-                    "engine": "python_networkx"
+                    "engine": "georoute",
+                    "profile": "transit",
+                    "algorithm": "raptor_multimodal"
                 }
             )
         ]
@@ -584,7 +622,9 @@ class PopulationCoverageService:
         summary.update({
             "scope": "rm",
             "mode": "transit",
-            "engine": "python_networkx",
+            "engine": "georoute",
+            "profile": "transit",
+            "algorithm": "raptor_multimodal",
             "comunas": comunas,
             "comunas_count": len(comunas),
             "failed_comunas": failed_comunas,

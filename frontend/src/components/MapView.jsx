@@ -1,6 +1,19 @@
-import React from 'react';
-import { MapContainer, TileLayer, GeoJSON, Marker, Popup } from 'react-leaflet';
+import React, { useEffect } from 'react';
+import { MapContainer, TileLayer, GeoJSON, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
+
+function FitGeoJsonBounds({ data }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const bounds = L.geoJSON(data).getBounds();
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 14 });
+    }
+  }, [data, map]);
+
+  return null;
+}
 
 const greenHeartIcon = new L.Icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
@@ -125,6 +138,7 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
   return (
     <div className="h-[480px] rounded-2xl overflow-hidden border border-slate-800 shadow-2xl relative">
       <MapContainer center={center} zoom={12} style={{ height: '100%', width: '100%' }}>
+        <FitGeoJsonBounds data={geoJsonData} />
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"

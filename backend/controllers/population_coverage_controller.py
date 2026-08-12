@@ -35,7 +35,8 @@ def get_population_accessibility(
 @router.get("/coverage")
 def get_population_coverage(
     comuna: str = Query(...),
-    minutes: float = Query(15, ge=1, le=180)
+    minutes: float = Query(15, ge=1, le=180),
+    profile: str = Query("foot", pattern="^(foot|car)$"),
 ):
     """
     Calcula cobertura poblacional por manzana para una comuna.
@@ -45,6 +46,7 @@ def get_population_coverage(
         print("CALCULANDO COBERTURA POBLACIONAL")
         print("comuna:", comuna)
         print("minutes:", minutes)
+        print("profile:", profile)
         print("===================================")
 
         import time
@@ -52,7 +54,8 @@ def get_population_coverage(
 
         result = service.build_population_coverage(
             comuna=comuna,
-            minutes=minutes
+            minutes=minutes,
+            profile=profile,
         )
 
         elapsed = time.perf_counter() - start_time
@@ -68,7 +71,8 @@ def get_population_coverage(
 
 @router.get("/coverage-rm")
 def get_population_coverage_rm(
-    minutes: float = Query(15, ge=1, le=180)
+    minutes: float = Query(15, ge=1, le=180),
+    profile: str = Query("foot", pattern="^(foot|car)$"),
 ):
     """
     Calcula cobertura poblacional consolidada para toda la RM.
@@ -77,13 +81,15 @@ def get_population_coverage_rm(
         print("===================================")
         print("CALCULANDO COBERTURA POBLACIONAL RM")
         print("minutes:", minutes)
+        print("profile:", profile)
         print("===================================")
 
         import time
         start_time = time.perf_counter()
 
         result = service.build_population_coverage_rm(
-            minutes=minutes
+            minutes=minutes,
+            profile=profile,
         )
 
         elapsed = time.perf_counter() - start_time

@@ -45,11 +45,65 @@ export const fetchHealthDeserts = async (type, comuna, minutes) => {
   return res.data;
 };
 
-export const fetchPopulationCoverage = async (comuna, minutes) => {
-  const params = { comuna: normalizeComuna(comuna), minutes };
-  const res = await api.get('/api/v1/population/coverage', { params });
+export const fetchPopulationCoverage = async (
+  comuna,
+  minutes,
+  travelMode = 'foot',
+  scope = 'comuna',
+  departureHour = null,
+) => {
+  const isTransit = travelMode === 'transit';
+  const isRm = scope === 'rm';
+  const endpoint = isTransit
+    ? `/api/v1/population/transit-coverage${isRm ? '-rm' : ''}`
+    : `/api/v1/population/coverage${isRm ? '-rm' : ''}`;
+  const params = { minutes };
+
+  if (!isRm) params.comuna = normalizeComuna(comuna);
+  if (isTransit && departureHour !== null) params.departure_hour = departureHour;
+  if (!isTransit) params.profile = travelMode;
+
+  const res = await api.get(endpoint, { params });
   return res.data;
 };
+
+async function apiErrorMessage(error, fallback) {
+  const data = error.response?.data;
+  if (data instanceof Blob) {
+    const text = await data.text();
+    try {
+      return JSON.parse(text)?.detail || fallback;
+    } catch {
+      return text || fallback;
+    }
+  }
+  return data?.detail || error.message || fallback;
+}
+
+function downloadBlob(blob, filename) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+}
+
+async function postPng(endpoint, payload, filename, fallbackError) {
+  try {
+    const response = await api.post(endpoint, payload, { responseType: 'blob' });
+    const contentType = response.headers?.['content-type'] || response.data?.type || '';
+    if (!contentType.includes('image/png')) {
+      const detail = await apiErrorMessage({ response }, fallbackError);
+      throw new Error(detail);
+    }
+    downloadBlob(response.data, filename);
+  } catch (error) {
+    throw new Error(await apiErrorMessage(error, fallbackError));
+  }
+}
 
 export const geocodeAutocomplete = async (query, limit = 5) => {
   if (!query || query.trim().length < 3) return [];
@@ -63,34 +117,19 @@ export const reverseGeocode = async (lat, lon) => {
 };
 
 export const exportHealthDesertPNG = async (data, minutes, comuna, mode) => {
-  const response = await api.post('/api/v1/export/health-desert', {
+  return postPng('/api/v1/export/health-desert', {
     data,
     minutes,
     comuna,
     mode
-  }, { responseType: 'blob' });
-  
-  const url = window.URL.createObjectURL(new Blob([response.data]));
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', `desierto_salud_${normalizeComuna(comuna)}_${minutes}min.png`);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  }, `desierto_salud_${normalizeComuna(comuna)}_${minutes}min.png`, 'Error exportando mapa de desiertos');
 };
 
-export const exportPopulationCoveragePNG = async (data, minutes, comuna) => {
-  const response = await api.post('/api/v1/export/population-coverage', {
+export const exportPopulationCoveragePNG = async (data, minutes, comuna, travelMode = 'foot') => {
+  return postPng('/api/v1/export/population-coverage', {
     data,
     minutes,
-    comuna
-  }, { responseType: 'blob' });
-  
-  const url = window.URL.createObjectURL(new Blob([response.data]));
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', `cobertura_poblacional_${normalizeComuna(comuna)}_${minutes}min.png`);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+    comuna,
+    mode: travelMode,
+  }, `cobertura_poblacional_${travelMode}_${normalizeComuna(comuna)}_${minutes}min.png`, 'Error exportando mapa de cobertura');
 };
