@@ -21,7 +21,13 @@ def build_population_coverage_gdfs(data: dict):
         if not geom_data:
             continue
 
-        geom = shape(geom_data)
+        try:
+            geom = shape(geom_data)
+        except Exception:
+            continue
+
+        if geom.is_empty:
+            continue
 
         if kind == "census_block":
             block_rows.append({
@@ -135,9 +141,16 @@ class ExportService:
         if not features:
             raise ValueError("No hay datos para exportar")
 
-        geoms = [shape(f["geometry"]) for f in features]
+        valid_features = [
+            feature for feature in features
+            if feature.get("geometry") and feature.get("properties", {}).get("kind")
+        ]
+        if not valid_features:
+            raise ValueError("No hay geometrias validas para exportar")
+
+        geoms = [shape(feature["geometry"]) for feature in valid_features]
         deserts_gdf = gpd.GeoDataFrame(
-            [f.get("properties", {}) for f in features],
+            [feature.get("properties", {}) for feature in valid_features],
             geometry=geoms,
             crs="EPSG:4326"
         )
@@ -190,11 +203,15 @@ class ExportService:
 
         try:
             blocks_gdf = blocks_gdf.to_crs(epsg=32719)
-            centers_gdf = centers_gdf.to_crs(epsg=32719)
+            if not centers_gdf.empty:
+                centers_gdf = centers_gdf.to_crs(epsg=32719)
         except Exception:
             pass
 
         fig, ax = plt.subplots(figsize=(16, 16))
+
+        if "coverage_ratio" not in blocks_gdf.columns:
+            blocks_gdf["coverage_ratio"] = 0
 
         blocks_gdf["coverage_pct"] = (
             blocks_gdf["coverage_ratio"].fillna(0) * 100
@@ -204,8 +221,8 @@ class ExportService:
             ax=ax,
             column="coverage_pct",
             cmap="Blues",
-            scheme="NaturalBreaks",
-            k=4,
+            vmin=0,
+            vmax=100,
             edgecolor="#5b6b7a",
             legend=False
         )

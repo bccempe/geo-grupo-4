@@ -63,6 +63,12 @@ class HealthRepository:
             required=False
         )
 
+        comuna_col = self._pick_column(
+            columns,
+            ["nom_comuna", "comuna", "NOM_COMUNA", "COMUNA"],
+            required=False
+        )
+
         lon_col = self._pick_column(
             columns,
             ["lon", "longitude", "x"],
@@ -109,6 +115,11 @@ class HealthRepository:
         else:
             select_parts.insert(1, "NULL::text AS name")
 
+        if comuna_col:
+            select_parts.append(f'"{comuna_col}" AS comuna')
+        else:
+            select_parts.append("NULL::text AS comuna")
+
         query = text(f"""
             SELECT
                 {", ".join(select_parts)}
@@ -130,6 +141,7 @@ class HealthRepository:
             centers.append({
                 "id": row["id"],
                 "name": row["name"],
+                "comuna": row["comuna"],
                 "lon": float(lon),
                 "lat": float(lat)
             })
