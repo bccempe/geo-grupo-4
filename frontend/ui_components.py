@@ -14,6 +14,7 @@ def build_population_coverage_gdfs(data: dict):
     features = data.get("features", [])
     block_rows = []
     center_rows = []
+    coverage_rows = []
 
     for feature in features:
         props = feature.get("properties", {})
@@ -32,6 +33,11 @@ def build_population_coverage_gdfs(data: dict):
             })
         elif kind == "health_center":
             center_rows.append({
+                **props,
+                "geometry": geom,
+            })
+        elif kind == "coverage":
+            coverage_rows.append({
                 **props,
                 "geometry": geom,
             })
@@ -62,10 +68,23 @@ def build_population_coverage_gdfs(data: dict):
             crs="EPSG:4326",
         )
 
-    return blocks_gdf, centers_gdf
+    if coverage_rows:
+        coverage_gdf = gpd.GeoDataFrame(
+            coverage_rows,
+            geometry="geometry",
+            crs="EPSG:4326",
+        )
+    else:
+        coverage_gdf = gpd.GeoDataFrame(
+            columns=["geometry"],
+            geometry="geometry",
+            crs="EPSG:4326",
+        )
+
+    return blocks_gdf, centers_gdf, coverage_gdf
 
 def calculate_coverage_statistics(data: dict) -> dict:
-    blocks_gdf, _ = build_population_coverage_gdfs(data)
+    blocks_gdf, *_ = build_population_coverage_gdfs(data)
 
     total_population = blocks_gdf["population"].fillna(0).sum()
     covered_population = blocks_gdf["covered_population"].fillna(0).sum()
@@ -624,6 +643,15 @@ def render_population_coverage(data: dict, map_key: str = "population_map"):
                 tooltip=tooltip,
             ).add_to(m)
             continue
+
+        if kind == "coverage":
+            style = {
+                "fillColor": "#a8d5a2",
+                "color": "#85b6b2",
+                "weight": 2,
+                "fillOpacity": 0.25,
+            }
+            tooltip = "Cobertura"
 
         if style:
             folium.GeoJson(

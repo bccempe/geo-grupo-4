@@ -127,16 +127,6 @@ def _add_population_legend(ax):
             marker="s",
             color="w",
             label="0 - 25 %",
-            markerfacecolor="#deebf7",
-            markersize=14
-        ),
-
-        Line2D(
-            [0],
-            [0],
-            marker="s",
-            color="w",
-            label="25 - 50 %",
             markerfacecolor="#9ecae1",
             markersize=14
         ),
@@ -146,8 +136,18 @@ def _add_population_legend(ax):
             [0],
             marker="s",
             color="w",
+            label="25 - 50 %",
+            markerfacecolor="#6baed6",
+            markersize=14
+        ),
+
+        Line2D(
+            [0],
+            [0],
+            marker="s",
+            color="w",
             label="50 - 75 %",
-            markerfacecolor="#4292c6",
+            markerfacecolor="#3182bd",
             markersize=14
         ),
 
@@ -236,38 +236,44 @@ def export_population_coverage_map(
     comuna: str | None = None,
     include_cartographic_elements: bool = False,
 ):
-    blocks_gdf, centers_gdf = build_population_coverage_gdfs(data)
+    blocks_gdf, centers_gdf, coverage_gdf = build_population_coverage_gdfs(data)
 
-    if blocks_gdf.empty:
+    if blocks_gdf.empty and coverage_gdf.empty:
         return None
 
     try:
-        blocks_gdf = blocks_gdf.to_crs(epsg=32719)
-        centers_gdf = centers_gdf.to_crs(epsg=32719)
+        blocks_gdf = blocks_gdf.to_crs(epsg=32719) if not blocks_gdf.empty else blocks_gdf
+        centers_gdf = centers_gdf.to_crs(epsg=32719) if not centers_gdf.empty else centers_gdf
+        coverage_gdf = coverage_gdf.to_crs(epsg=32719) if not coverage_gdf.empty else coverage_gdf
     except Exception:
         pass
 
     fig, ax = plt.subplots(figsize=(16, 16))
 
-    blocks_gdf["coverage_pct"] = (
-        blocks_gdf["coverage_ratio"].fillna(0) * 100
-    ).clip(0, 100)
+    if not coverage_gdf.empty:
+        coverage_gdf.plot(
+            ax=ax,
+            color="#a8d5a2",
+            edgecolor="#85b6b2",
+            linewidth=1.5,
+            alpha=0.35,
+            label="Cobertura",
+        )
 
-    blocks_gdf.plot(
-        ax=ax,
-        column="coverage_pct",
-        cmap="Blues",
-        scheme="NaturalBreaks",
-        k=4,
-        edgecolor="#5b6b7a",
-        legend=False,
-        legend_kwds={
-            "title": "Nivel de cobertura (%)",
-            "loc": "upper left",
-            "fontsize": 9,
-        },
-    )
+    if not blocks_gdf.empty:
+        blocks_gdf["coverage_pct"] = (
+            blocks_gdf["coverage_ratio"].fillna(0) * 100
+        ).clip(0, 100)
 
+        blocks_gdf.plot(
+            ax=ax,
+            column="coverage_pct",
+            cmap="Blues",
+            scheme="UserDefined",
+            classification_kwds={"bins": [0, 25, 50, 75, 100]},
+            edgecolor="#5b6b7a",
+            legend=False,
+        )
 
     if not centers_gdf.empty:
         centers_gdf.plot(
