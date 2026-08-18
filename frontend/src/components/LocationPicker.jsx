@@ -21,6 +21,14 @@ const redMarkerIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
+const originEmojiIcon = L.divIcon({
+  className: 'emoji-marker',
+  html: '<span class="emoji-marker-glyph" role="img" aria-label="Origen">📍</span>',
+  iconSize: [28, 28],
+  iconAnchor: [14, 24],
+  popupAnchor: [0, -20]
+});
+
 function MapEventsHandler({ onLocationSelect }) {
   useMapEvents({
     click(e) {
@@ -148,7 +156,7 @@ export default function LocationPicker({ location, setLocation }) {
             attribution='&copy; <a href="https://carto.com/">CARTO</a>'
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
-          <Marker position={[location.lat, location.lon]} icon={redMarkerIcon}>
+          <Marker position={[location.lat, location.lon]} icon={originEmojiIcon}>
             <Popup>{location.address || 'Punto de Origen'}</Popup>
           </Marker>
           <MapEventsHandler onLocationSelect={handleMapClick} />

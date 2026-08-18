@@ -15,23 +15,8 @@ function FitGeoJsonBounds({ data }) {
   return null;
 }
 
-const greenHeartIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
 
-const redOriginIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+// Icons --------------------------------------------------
 
 const blueProposedIcon = new L.Icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
@@ -40,6 +25,22 @@ const blueProposedIcon = new L.Icon({
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
   shadowSize: [41, 41]
+});
+
+const hospitalEmojiIcon = L.divIcon({
+className: 'emoji-marker',
+html: '<span class="emoji-marker-glyph" role="img" aria-label="Hospital">🏥</span>',
+iconSize: [28, 28],
+iconAnchor: [14, 24],
+popupAnchor: [0, -20]
+});
+
+const originEmojiIcon = L.divIcon({
+className: 'emoji-marker',
+html: '<span class="emoji-marker-glyph" role="img" aria-label="Origen">📍</span>',
+iconSize: [28, 28],
+iconAnchor: [14, 24],
+popupAnchor: [0, -20]
 });
 
 export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 }) {
@@ -176,7 +177,7 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
         {originFeature?.geometry?.coordinates && (
           <Marker
             position={[originFeature.geometry.coordinates[1], originFeature.geometry.coordinates[0]]}
-            icon={redOriginIcon}
+            icon={originEmojiIcon}
           >
             <Popup>Punto de Origen</Popup>
           </Marker>
@@ -188,7 +189,7 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
           if (!coords || coords.length < 2) return null;
           const name = center.properties?.name || center.properties?.nombre || 'Centro de salud';
           return (
-            <Marker key={idx} position={[coords[1], coords[0]]} icon={greenHeartIcon}>
+            <Marker key={idx} position={[coords[1], coords[0]]} icon={hospitalEmojiIcon}>
               <Popup>
                 <div className="text-xs font-semibold text-slate-800 font-['Inter']">
                   🏥 {name}
