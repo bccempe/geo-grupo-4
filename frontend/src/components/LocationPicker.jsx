@@ -4,29 +4,14 @@ import L from 'leaflet';
 import { Search, MapPin, Loader2, Compass } from 'lucide-react';
 import { geocodeAutocomplete, reverseGeocode } from '../api/apiService';
 
+import { SYMBOLS_EMOJI, renderMapIcon_FromSymbol } from '../config/MapSymbolsEmoji';
+
 // Fix default Leaflet icon marker URLs
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
-
-const redMarkerIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-const originEmojiIcon = L.divIcon({
-  className: 'emoji-marker',
-  html: '<span class="emoji-marker-glyph" role="img" aria-label="Origen">📍</span>',
-  iconSize: [28, 28],
-  iconAnchor: [14, 24],
-  popupAnchor: [0, -20]
 });
 
 function MapEventsHandler({ onLocationSelect }) {
@@ -156,7 +141,7 @@ export default function LocationPicker({ location, setLocation }) {
             attribution='&copy; <a href="https://carto.com/">CARTO</a>'
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
-          <Marker position={[location.lat, location.lon]} icon={originEmojiIcon}>
+          <Marker position={[location.lat, location.lon]} icon={renderMapIcon_FromSymbol(SYMBOLS_EMOJI.origin)}>
             <Popup>{location.address || 'Punto de Origen'}</Popup>
           </Marker>
           <MapEventsHandler onLocationSelect={handleMapClick} />

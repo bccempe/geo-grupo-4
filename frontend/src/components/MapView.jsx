@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, GeoJSON, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
+import { SYMBOLS_EMOJI, renderMapIcon_FromSymbol } from '../config/MapSymbolsEmoji';
+
 function FitGeoJsonBounds({ data }) {
   const map = useMap();
 
@@ -14,34 +16,6 @@ function FitGeoJsonBounds({ data }) {
 
   return null;
 }
-
-
-// Icons --------------------------------------------------
-
-const blueProposedIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-const hospitalEmojiIcon = L.divIcon({
-className: 'emoji-marker',
-html: '<span class="emoji-marker-glyph" role="img" aria-label="Hospital">🏥</span>',
-iconSize: [28, 28],
-iconAnchor: [14, 24],
-popupAnchor: [0, -20]
-});
-
-const originEmojiIcon = L.divIcon({
-className: 'emoji-marker',
-html: '<span class="emoji-marker-glyph" role="img" aria-label="Origen">📍</span>',
-iconSize: [28, 28],
-iconAnchor: [14, 24],
-popupAnchor: [0, -20]
-});
 
 export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 }) {
   if (!geoJsonData || !geoJsonData.features || geoJsonData.features.length === 0) {
@@ -177,7 +151,7 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
         {originFeature?.geometry?.coordinates && (
           <Marker
             position={[originFeature.geometry.coordinates[1], originFeature.geometry.coordinates[0]]}
-            icon={originEmojiIcon}
+            icon={renderMapIcon_FromSymbol(SYMBOLS_EMOJI.origin)}
           >
             <Popup>Punto de Origen</Popup>
           </Marker>
@@ -189,10 +163,10 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
           if (!coords || coords.length < 2) return null;
           const name = center.properties?.name || center.properties?.nombre || 'Centro de salud';
           return (
-            <Marker key={idx} position={[coords[1], coords[0]]} icon={hospitalEmojiIcon}>
+            <Marker key={idx} position={[coords[1], coords[0]]} icon={renderMapIcon_FromSymbol(SYMBOLS_EMOJI.hospital)}>
               <Popup>
                 <div className="text-xs font-semibold text-slate-800 font-['Inter']">
-                  🏥 {name}
+                  {SYMBOLS_EMOJI.hospital.emoji} {name}
                 </div>
               </Popup>
             </Marker>
@@ -207,7 +181,7 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
           const covPop = Math.round(center.properties?.covered_population || 0);
           const covEld = Math.round(center.properties?.covered_elderly || 0);
           return (
-            <Marker key={`proposed-${idx}`} position={[coords[1], coords[0]]} icon={blueProposedIcon}>
+            <Marker key={`proposed-${idx}`} position={[coords[1], coords[0]]} icon={renderMapIcon_FromSymbol(SYMBOLS_EMOJI.proposed)}>
               <Popup>
                 <div className="text-xs font-sans text-slate-800">
                   <b>Centro propuesto #{rank}</b><br/>
@@ -230,11 +204,11 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
               <span>Isócrona ({minutes} min)</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-red-500 font-bold">📍</span>
+              <span className="text-red-500 font-bold">{SYMBOLS_EMOJI.origin.emoji}</span>
               <span>Origen</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-emerald-500 font-bold">🏥</span>
+              <span className="text-emerald-500 font-bold">{SYMBOLS_EMOJI.hospital.emoji}</span>
               <span>Centro de Salud</span>
             </div>
           </>
@@ -250,7 +224,7 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
               <span>Desierto de Salud</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-emerald-500 font-bold">🏥</span>
+              <span className="text-emerald-500 font-bold">{SYMBOLS_EMOJI.hospital.emoji}</span>
               <span>Centro de Salud</span>
             </div>
           </>
@@ -282,11 +256,11 @@ export default function MapView({ geoJsonData, type = 'isochrone', minutes = 30 
               <span>Cobertura propuesta</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-amber-400 font-bold">★</span>
+              <span className="text-amber-400 font-bold">{SYMBOLS_EMOJI.proposed.emoji}</span>
               <span>Centro propuesto</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-emerald-500 font-bold">🏥</span>
+              <span className="text-emerald-500 font-bold">{SYMBOLS_EMOJI.hospital.emoji}</span>
               <span>Centro existente</span>
             </div>
           </>
