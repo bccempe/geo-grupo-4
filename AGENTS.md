@@ -9,8 +9,9 @@ Geoinformática USACH — Grupo 4 — Ruta comercial
 Plataforma web que calcula isócronas de accesibilidad a CESFAM/SAPU en comunas de la
 Región Metropolitana, cruza esa cobertura con datos censales, e identifica "desiertos de salud".
 
-Etapa actual: escalar de 1 comuna validada (Puente Alto) a un segundo caso generalizado (Región Metropolitana completa), e
-integrar el motor Rust `georoute` en el pipeline real.
+Etapa actual: motor Rust `georoute` integrado en el pipeline real (foot,
+car y transit/RAPTOR), aplicación React desplegada y escalamiento regional
+a las 52 comunas verificado.
 
 ---
 
@@ -20,14 +21,14 @@ integrar el motor Rust `georoute` en el pipeline real.
 |---|---|
 | Base de datos | PostgreSQL 15 + PostGIS 3.4 |
 | Backend | Python 3.11, FastAPI, Uvicorn |
-| Motor de rutas | `georoute` (Rust) — por integrar |
-| Análisis espacial | GeoPandas, Shapely, NetworkX, OSMnx 1.6 |
-| Frontend | Streamlit + Folium |
+| Motor de rutas | `georoute` (Rust) — integrado: `georoute-foot`, `georoute-car`, `georoute-transit` (RAPTOR/GTFS) |
+| Análisis espacial | GeoPandas, Shapely, NetworkX, OSMnx 1.6 (NetworkX solo en método legacy) |
+| Frontend | React 18 + Leaflet, servido por Nginx (Vite en build) |
 | Contenedores | Docker, Docker Compose |
 
 Servicios ya definidos, no renombrar sin razón técnica documentada:
 `IsochroneService`, `TransitIsochroneService`, `PopulationCoverageService`,
-`CarHealthDesertService`.
+`CarHealthDesertService` (y `LocationOptimizationService`).
 
 ---
 
@@ -35,10 +36,12 @@ Servicios ya definidos, no renombrar sin razón técnica documentada:
 
 - El esquema de PostGIS ya cargado (nodos/aristas viales, tablas GTFS, manzanas censales).
 - La lógica de `IsochroneService` para Puente Alto — está validada y respalda los números
-  ya publicados (≈96,5% cobertura poblacional total, ≈97,9% adultos mayores).
+  ya publicados (≈96,7% cobertura poblacional total, ≈98,0% adultos mayores).
 - La convención de CRS: EPSG:4326 para almacenamiento/interoperabilidad, EPSG:32719
   (UTM 19S) para cálculos métricos (áreas, distancias). No mezclar sistemas de referencia
   dentro de una misma operación geométrica.
+- La versión de `georoute`: el Dockerfile clona la rama `master` por defecto
+  (`GEOROUTE_REF`). No cambiarla sin fijar antes un commit probado y registrar la elección.
 
 Si una tarea requiere modificar algo de esta lista, generar el diff pero no aplicarlo
 automáticamente — dejarlo para revisión de un integrante.
@@ -74,14 +77,27 @@ Ejemplo mal acotado:
 
 ---
 
-## 6. Integración de `georoute` — PENDIENTE DE DETALLE
+## 6. Integración de `georoute` — COMPLETADA y verificada
 
-⚠️ Falta la guía `integracion_georoute.tex`. Completar esta sección con:
+La guía del curso está en `integracion_georoute.pdf` y las notas
+técnicas del contrato en `docs/georoute-integration.md`. Estado:
 
-- [ ] Punto exacto del pipeline donde reemplaza o complementa a OSMnx+NetworkX
-- [ ] Contrato de entrada/salida esperado (formato de grafo, unidades de tiempo/distancia)
-- [ ] Cómo se compila/empaqueta dentro del `docker-compose.yml` existente
-- [ ] Cómo correr un benchmark simple (tiempo de cálculo antes/después del cambio)
+- **Punto del pipeline:** reemplaza a OSMnx+NetworkX en el flujo activo
+  (isócronas, desiertos, cobertura y optimización de ubicaciones). El
+  método legacy con NetworkX permanece solo para el benchmark y como
+  comparación, no en el flujo público.
+- **Contrato:** los tres motores (`georoute-foot`, `georoute-car`,
+  `georoute-transit`) reciben coordenadas WGS84 (`lon,lat`, EPSG:4326) y
+  minutos; la respuesta es GeoJSON `FeatureCollection` con
+  `engine=georoute`. El cálculo métrico downstream usa EPSG:32719.
+- **Empaquetado:** el motor se compila dentro de `backend/Dockerfile.georoute`
+  (clona `georoute` con `GEOROUTE_REF`, corre `cargo test --workspace --locked`)
+  y los servicios se orquestan en `docker-compose.yml`; el flag `--profile web`
+  levanta PostGIS, los tres servidores Rust y el backend.
+- **Benchmark:** `cd backend && python -m scripts.benchmark_georoute`
+  (NetworkX vs georoute, mismos parámetros); `benchmark_lab3.py` cubre el
+  caso real con isócronas/2SFCA/RAPTOR. Resultados en
+  `resultados_informe/benchmark_georoute.md`.
 
 ---
 
@@ -91,14 +107,14 @@ Ejemplo mal acotado:
    indicadores no cambian de forma inesperada.
 2. Si el cambio toca geometrías o CRS, inspeccionar visualmente el mapa resultante
    (mismos elementos que ya usan: barra de escala, norte, leyenda, fuente).
-3. Confirmar que el output GeoJSON sigue siendo consumible por el frontend Streamlit sin
-   cambios adicionales.
+3. Confirmar que el output GeoJSON sigue siendo consumible por el frontend React (Leaflet)
+   sin cambios adicionales, y que el mapa exportado conserva leyenda, norte, escala y fuente.
 
 ---
 
 ## 8. Reproducibilidad
 
-- `docker compose up` debe levantar el proyecto completo sin pasos manuales adicionales.
-- `requirements.txt` (Python) y `Cargo.toml`/`Cargo.lock` (Rust, una vez integrado
-  `georoute`) deben reflejar las dependencias reales.
+- `docker compose --profile web up -d --build` debe levantar el proyecto completo sin pasos manuales adicionales.
+- `requirements.txt` (Python) y `Cargo.toml`/`Cargo.lock` (Rust, dentro del
+  contenedor del motor) deben reflejar las dependencias reales.
 - Sin TODOs críticos sin resolver en el código que se entrega.
